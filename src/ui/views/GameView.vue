@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import BattleOverlay from '../components/BattleOverlay.vue';
+import DeckOverlay from '../components/DeckOverlay.vue';
 import DialogBox from '../components/DialogBox.vue';
 import GameHud from '../components/GameHud.vue';
 import MinigameHud from '../components/MinigameHud.vue';
@@ -11,7 +12,7 @@ import { useSettingsStore } from '../stores/settings';
 
 const container = ref<HTMLElement | null>(null);
 const game = useGame(container);
-const { session, input, modeKind, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused } = game;
+const { session, input, modeKind, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen } = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -19,11 +20,17 @@ const showTouch = computed(
   () =>
     modeKind.value !== 'battle' &&
     !paused.value &&
+    !deckOpen.value &&
     (settings.touchControls === 'on' || (settings.touchControls === 'auto' && coarsePointer)),
 );
 
 const onKeyDown = (event: KeyboardEvent): void => {
-  if (event.code === 'Escape') game.setPaused(!paused.value);
+  if (event.code === 'Escape') {
+    if (deckOpen.value) game.setDeckOpen(false);
+    else game.setPaused(!paused.value);
+  } else if (event.code === 'KeyC' && !event.repeat) {
+    game.setDeckOpen(!deckOpen.value);
+  }
 };
 
 onMounted(() => window.addEventListener('keydown', onKeyDown));
@@ -40,6 +47,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       :quests="quests"
       :card-total="cardTotal"
       :deck-size="deckSize"
+      @open-deck="game.setDeckOpen(true)"
     />
     <MinigameHud v-if="modeKind === 'minigame'" :session="session" />
     <BattleOverlay v-if="battle" :session="session" :state="battle" />
@@ -50,8 +58,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>
     </ul>
 
+    <DeckOverlay v-if="deckOpen" :session="session" @close="game.setDeckOpen(false)" @changed="game.refresh()" />
+
     <button
-      v-if="!paused"
+      v-if="!paused && !deckOpen"
       type="button"
       class="pixel-button pixel-button--ghost game__pause"
       aria-label="Пауза"

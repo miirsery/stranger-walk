@@ -2,7 +2,7 @@
 import type { AttackTarget, BattleState, UnitState } from '@core/battle/cardBattle';
 import type { CardDef } from '@core/content/types';
 import type { GameSession } from '@core/session/gameSession';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import CardFace from './CardFace.vue';
 
 const props = defineProps<{ session: GameSession; state: BattleState }>();
@@ -13,7 +13,24 @@ const message = ref('');
 const player = computed(() => props.state.sides.player);
 const enemy = computed(() => props.state.sides.enemy);
 const myTurn = computed(() => props.state.active === 'player' && props.state.winner === null);
-const lastLog = computed(() => props.state.log.slice(-3));
+const enemyTurn = computed(() => props.state.active === 'enemy' && props.state.winner === null);
+const lastLog = computed(() => props.state.log.slice(-4));
+
+/** Пауза между действиями противника, чтобы игрок успевал следить за ходом. */
+const ENEMY_STEP_MS = 700;
+let enemyTimer: ReturnType<typeof setInterval> | null = null;
+
+const stopEnemy = (): void => {
+  if (enemyTimer !== null) clearInterval(enemyTimer);
+  enemyTimer = null;
+};
+
+const runEnemyTurn = (): void => {
+  stopEnemy();
+  enemyTimer = setInterval(() => {
+    if (!props.session.battleEnemyStep()) stopEnemy();
+  }, ENEMY_STEP_MS);
+};
 
 const card = (cardId: string): CardDef => props.session.content.card(cardId);
 const tint = (cardId: string): number => props.session.content.setting(card(cardId).setting).backgroundColor;
@@ -59,8 +76,12 @@ const attack = (target: AttackTarget): void => {
 
 const endTurn = (): void => {
   selectedUid.value = null;
-  report(props.session.battleEndTurn());
+  const result = props.session.battleEndTurn();
+  report(result);
+  if (result.ok) runEnemyTurn();
 };
+
+onBeforeUnmount(stopEnemy);
 
 watch(
   () => props.state.winner,
@@ -131,9 +152,14 @@ watch(
           <span v-for="index in player.maxMana" :key="index" class="battle__crystal" :class="{ 'battle__crystal--spent': index > player.mana }" />
           <span>{{ player.mana }}/{{ player.maxMana }}</span>
         </p>
-        <p class="battle__message" aria-live="polite">{{ message || lastLog[lastLog.length - 1] }}</p>
+        <p v-if="message" class="battle__message" aria-live="polite">{{ message }}</p>
+        <ol class="battle__log" aria-label="Журнал боя" aria-live="polite">
+          <li v-for="(line, index) in lastLog" :key="`${state.log.length}-${index}`">{{ line }}</li>
+        </ol>
         <div class="battle__actions">
-          <button type="button" class="pixel-button" :disabled="!myTurn" @click="endTurn">Конец хода</button>
+          <button type="button" class="pixel-button" :disabled="!myTurn" @click="endTurn">
+            {{ enemyTurn ? 'Ход врага…' : 'Конец хода' }}
+          </button>
           <button type="button" class="pixel-button pixel-button--ghost" @click="session.leaveBattle()">Сдаться</button>
         </div>
       </div>
@@ -319,8 +345,22 @@ watch(
 }
 
 .battle__message {
-  min-height: 2.6em;
+  color: var(--red);
+}
+
+.battle__log {
+  display: grid;
+  gap: 2px;
+  min-height: 7em;
+  padding: 0;
+  margin: 0;
+  font-size: 7px;
   color: var(--muted);
+  list-style: none;
+}
+
+.battle__log li:last-child {
+  color: var(--text);
 }
 
 .battle__actions {

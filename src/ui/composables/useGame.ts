@@ -27,7 +27,11 @@ export interface GameBridge {
   deckSize: Ref<number>;
   toasts: Ref<Toast[]>;
   paused: Ref<boolean>;
+  deckOpen: Ref<boolean>;
   setPaused: (value: boolean) => void;
+  /** Открыть или закрыть редактор колоды (доступен только в мире). */
+  setDeckOpen: (value: boolean) => void;
+  refresh: () => void;
 }
 
 const TOAST_MS = 4000;
@@ -49,6 +53,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
   const deckSize = ref(0);
   const toasts = ref<Toast[]>([]);
   const paused = ref(false);
+  const deckOpen = ref(false);
 
   let handle: GameHandle | null = null;
   let nextToastId = 1;
@@ -86,9 +91,18 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     }
   };
 
+  // Мир замирает и на паузе, и пока открыт редактор колоды.
+  const syncPause = (): void => handle?.setPaused(paused.value || deckOpen.value);
+
   const setPaused = (value: boolean): void => {
     paused.value = value;
-    handle?.setPaused(value);
+    syncPause();
+  };
+
+  const setDeckOpen = (value: boolean): void => {
+    if (value && (session.mode.kind !== 'world' || paused.value)) return;
+    deckOpen.value = value;
+    syncPause();
   };
 
   onMounted(async () => {
@@ -99,7 +113,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     cleanups.push(input.attachKeyboard(window));
     cleanups.push(
       input.onAction(() => {
-        if (!paused.value) session.interact();
+        if (!paused.value && !deckOpen.value) session.interact();
       }),
     );
     audio.unlock();
@@ -109,7 +123,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     // Компонент могли размонтировать, пока грузился чанк с Phaser.
     if (!container.value) return;
     handle = createGame(container.value, session, input);
-    handle.setPaused(paused.value);
+    syncPause();
   });
 
   onBeforeUnmount(() => {
@@ -121,5 +135,5 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, setPaused };
+  return { session, input, modeKind, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, setPaused, setDeckOpen, refresh };
 };

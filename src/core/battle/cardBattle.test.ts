@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CardDef, CardKeyword } from '../content/types';
 import { createRng } from '../util/rng';
-import { playAiTurn } from './ai';
+import { chooseAiAction, performAiStep, playAiTurn } from './ai';
 import type { BattleRules } from './cardBattle';
 import { CardBattle } from './cardBattle';
 
@@ -157,6 +157,16 @@ describe('CardBattle', () => {
 });
 
 describe('playAiTurn', () => {
+  it('по шагам: карта, атака, конец хода; вне своего хода ИИ не действует', () => {
+    const battle = createBattle(many('grunt', 10), many('rusher', 10));
+    expect(chooseAiAction(battle, 'enemy')).toBeNull();
+    battle.endTurn('player');
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'play', handIndex: 0 });
+    expect(performAiStep(battle, 'enemy')).toMatchObject({ type: 'attack', target: { type: 'hero' } });
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'endTurn' });
+    expect(battle.active).toBe('player');
+  });
+
   it('разыгрывает карты, атакует и передаёт ход', () => {
     const battle = createBattle(many('grunt', 10), many('rusher', 10));
     battle.endTurn('player');

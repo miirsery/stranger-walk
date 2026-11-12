@@ -10,8 +10,9 @@ interface StoredSettings {
   touchControls: TouchControlsMode;
 }
 
-const STORAGE_KEY = 'stranger-walk:settings';
-const DEFAULTS: StoredSettings = { musicVolume: 0.5, sfxVolume: 0.7, touchControls: 'auto' };
+// v2: тихая громкость по умолчанию — старые сохранённые значения не подхватываются.
+const STORAGE_KEY = 'stranger-walk:settings:v2';
+const DEFAULTS: StoredSettings = { musicVolume: 0.15, sfxVolume: 0.25, touchControls: 'auto' };
 
 const clamp01 = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;

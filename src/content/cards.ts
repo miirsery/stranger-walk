@@ -30,6 +30,13 @@ const list: CardDef[] = [
   unit('knight', 'Рыцарь', 'castle', 4, 4, 4, 'rare', 'Защитник замковых ворот.', ['guard']),
   unit('gargoyle', 'Горгулья', 'castle', 5, 5, 6, 'epic', 'Каменный защитник.', ['guard']),
   unit('shadow', 'Тень Хранителя', 'castle', 7, 7, 7, 'legendary', 'Рывок: атакует сразу.', ['charge']),
+  // Космос
+  unit('drone', 'Дрон', 'space', 1, 1, 1, 'common', 'Рывок: атакует сразу.', ['charge']),
+  unit('astronaut', 'Астронавт', 'space', 2, 2, 3, 'common', 'Первым выходит в открытый космос.'),
+  unit('turret', 'Лазерная турель', 'space', 3, 4, 2, 'rare', 'Стреляет точно, ломается быстро.'),
+  unit('shield', 'Щитовой модуль', 'space', 3, 1, 6, 'rare', 'Защитник станции.', ['guard']),
+  unit('comet', 'Комета', 'space', 4, 5, 2, 'epic', 'Рывок: атакует сразу.', ['charge']),
+  unit('titan', 'Звёздный титан', 'space', 8, 8, 8, 'legendary', 'Защитник размером с луну.', ['guard']),
 ];
 
 export const cards: Record<string, CardDef> = Object.fromEntries(list.map((card) => [card.id, card]));

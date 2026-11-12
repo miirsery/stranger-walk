@@ -95,14 +95,44 @@ export const npcs: Record<string, NpcDef> = {
       { lines: ['Турбины гудят ровно. Значит, день хороший.'] },
     ],
   },
+  void_captain: {
+    id: 'void_captain',
+    name: 'Капитан Пустоты',
+    look: { body: 0x2a3f6b, skin: 0x9fe3d6, hat: 0x6bd6e3 },
+    scripts: [
+      {
+        when: [{ type: 'bossDefeated', bossId: 'void_captain', value: true }],
+        lines: ['Курс свободен, Странник. Дальше — только звёзды.'],
+      },
+      {
+        lines: [
+          'Гость с поверхности? Давно никто не поднимался так высоко.',
+          'Карты Хранителя теперь мои. Хочешь их — выиграй.',
+        ],
+        effects: [{ type: 'startBattle', bossId: 'void_captain' }],
+      },
+    ],
+  },
   keeper: {
     id: 'keeper',
     name: 'Хранитель Колоды',
     look: { body: 0x2b1d3a, skin: 0xb8b0c8, hat: 0xd9a441 },
     scripts: [
       {
+        when: [
+          { type: 'bossDefeated', bossId: 'keeper', value: true },
+          { type: 'questStatus', questId: 'beyond', status: 'inactive' },
+        ],
+        lines: [
+          'Ты победил честно. Карты миров снова свободны… пока что.',
+          'Но часть колоды я проиграл раньше — Капитану Пустоты, на орбите.',
+          'Звёздные врата в углу зала открыты. Верни карты, Странник.',
+        ],
+        effects: [{ type: 'startQuest', questId: 'beyond' }],
+      },
+      {
         when: [{ type: 'bossDefeated', bossId: 'keeper', value: true }],
-        lines: ['Ты победил честно. Карты миров снова свободны… пока что.'],
+        lines: ['Звёздные врата — в северо-восточном углу зала.'],
       },
       {
         lines: [

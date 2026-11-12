@@ -1,4 +1,4 @@
-import { playAiTurn } from '../battle/ai';
+import { performAiStep } from '../battle/ai';
 import type { ActionResult, AttackTarget } from '../battle/cardBattle';
 import { CardBattle } from '../battle/cardBattle';
 import { CardCollection } from '../cards/collection';
@@ -129,13 +129,23 @@ export class GameSession {
     return this.battleAction((battle) => battle.attack('player', attackerUid, target));
   }
 
-  /** Завершает ход игрока; противник отвечает сразу же. */
+  /** Завершает ход игрока. Дальше ход противника по шагам ведёт `battleEnemyStep`. */
   battleEndTurn(): ActionResult {
-    return this.battleAction((battle) => {
-      const result = battle.endTurn('player');
-      if (result.ok) playAiTurn(battle, 'enemy');
-      return result;
+    return this.battleAction((battle) => battle.endTurn('player'));
+  }
+
+  /**
+   * Одно действие противника (карта, атака или конец хода). UI вызывает его с паузами,
+   * чтобы игрок видел, что происходит. Возвращает true, пока ход противника продолжается.
+   */
+  battleEnemyStep(): boolean {
+    const mode = this.currentMode;
+    if (mode.kind !== 'battle' || mode.battle.winner || mode.battle.active !== 'enemy') return false;
+    this.battleAction((battle) => {
+      performAiStep(battle, 'enemy');
+      return { ok: true };
     });
+    return mode.battle.winner === null && mode.battle.active === 'enemy';
   }
 
   /** Закрывает экран боя после его окончания (или сдачи) и применяет итоги. */

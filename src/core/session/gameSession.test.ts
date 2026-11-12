@@ -26,6 +26,11 @@ const talk = (session: GameSession, standAt: Point): void => {
   skipDialog(session);
 };
 
+/** Доигрывает ход противника по шагам, как это делает UI. */
+const finishEnemyTurn = (session: GameSession): void => {
+  for (let i = 0; i < 100 && session.battleEnemyStep(); i++);
+};
+
 const record = (session: GameSession): SessionEvent[] => {
   const events: SessionEvent[] = [];
   session.events.on((event) => events.push(event));
@@ -80,6 +85,14 @@ describe('GameSession', () => {
     expect(session.world.player.x).toBe(x);
   });
 
+  it('звёздные врата закрыты, пока Хранитель не побеждён', () => {
+    const session = new GameSession(gameContent);
+    session.world.loadLevel('castle');
+    place(session, { x: 19, y: 2 });
+    expect(session.world.level.id).toBe('castle');
+    expect(session.mode.kind).toBe('dialog');
+  });
+
   it('закрытый портал не пропускает и объясняет почему', () => {
     const session = new GameSession(gameContent);
     place(session, { x: 27, y: 8 });
@@ -132,7 +145,11 @@ describe('GameSession', () => {
     // Действия вне очереди отклоняются, корректные — проходят.
     expect(session.battleAttack(999, { type: 'hero' }).ok).toBe(false);
     expect(session.battleEndTurn().ok).toBe(true);
+    expect(mode.battle.active).toBe('enemy');
+    expect(session.battlePlayCard(0).ok).toBe(false);
+    finishEnemyTurn(session);
     expect(mode.battle.winner ?? mode.battle.active).toBe(mode.battle.winner ?? 'player');
+    expect(session.battleEnemyStep()).toBe(false);
 
     // Сдаёмся: босс не побеждён, квест не закрыт.
     session.leaveBattle();
@@ -143,7 +160,7 @@ describe('GameSession', () => {
 
   it('победа над боссом закрывает квест и выдаёт награды', () => {
     const keeper = new ContentRegistry(gameContent).boss('keeper');
-    const session = new GameSession({ ...gameContent, bosses: { keeper: { ...keeper, health: 1 } } }, { seed: 5 });
+    const session = new GameSession({ ...gameContent, bosses: { ...gameContent.bosses, keeper: { ...keeper, health: 1 } } }, { seed: 5 });
     const events = record(session);
     session.world.loadLevel('castle');
     // Квест берём напрямую: путь до него проверен в предыдущем тесте.
@@ -163,6 +180,7 @@ describe('GameSession', () => {
         if (target) session.battleAttack(unit.uid, target);
       }
       session.battleEndTurn();
+      finishEnemyTurn(session);
     }
 
     const mode = session.mode;
@@ -173,5 +191,12 @@ describe('GameSession', () => {
     expect(session.quests.status('final_game')).toBe('completed');
     expect(session.cards.count('shadow')).toBe(1);
     expect(session.check([{ type: 'bossDefeated', bossId: 'keeper', value: true }])).toBe(true);
+
+    // После победы Хранитель выдаёт следующий квест, а звёздные врата ведут на станцию.
+    talk(session, { x: 10, y: 2 });
+    expect(session.quests.status('beyond')).toBe('active');
+    place(session, { x: 19, y: 2 });
+    expect(session.world.level.id).toBe('station');
+    expect(session.world.map.setting.id).toBe('space');
   });
 });

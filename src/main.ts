@@ -13,3 +13,5 @@ createApp(App).use(createPinia()).use(router).mount('#app');
 const unlock = (): void => audio.unlock();
 window.addEventListener('pointerdown', unlock);
 window.addEventListener('keydown', unlock);
+// Скрытая вкладка не должна шуметь.
+document.addEventListener('visibilitychange', () => audio.setMuted(document.hidden));

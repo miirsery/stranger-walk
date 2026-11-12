@@ -28,4 +28,14 @@ export const quests: Record<string, QuestDef> = {
     ],
     rewardCards: ['shadow'],
   },
+  beyond: {
+    id: 'beyond',
+    title: 'За горизонтом',
+    description: 'Поднимись на орбитальную станцию и верни карты, проигранные Хранителем.',
+    objectives: [
+      { id: 'enter_station', text: 'Пройди через звёздные врата в замке', type: 'enterLevel', levelId: 'station' },
+      { id: 'defeat_captain', text: 'Победи Капитана Пустоты', type: 'defeatBoss', bossId: 'void_captain' },
+    ],
+    rewardCards: ['titan'],
+  },
 };

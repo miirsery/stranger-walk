@@ -37,8 +37,9 @@ export class ChiptuneAudio {
   private ctx: AudioContext | null = null;
   private musicGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
-  private musicVolume = 0.5;
-  private sfxVolume = 0.7;
+  private musicVolume = 0.15;
+  private sfxVolume = 0.25;
+  private muted = false;
 
   private track: MusicTrackDef | null = null;
   private lead: string[] = [];
@@ -57,7 +58,15 @@ export class ChiptuneAudio {
       this.sfxGain.connect(this.ctx.destination);
       this.applyVolumes();
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    if (this.ctx.state === 'suspended' && !this.muted) void this.ctx.resume();
+  }
+
+  /** Полная тишина, пока вкладка скрыта или приложение свёрнуто. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (!this.ctx) return;
+    if (muted) void this.ctx.suspend();
+    else void this.ctx.resume();
   }
 
   setMusicVolume(volume: number): void {

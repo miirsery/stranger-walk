@@ -9,6 +9,8 @@ const props = defineProps<{
   deckSize: number;
 }>();
 
+defineEmits<{ openDeck: [] }>();
+
 const active = computed(() => props.quests.filter((quest) => quest.status === 'active'));
 const completed = computed(() => props.quests.filter((quest) => quest.status === 'completed').length);
 </script>
@@ -33,11 +35,17 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
       </div>
       <p v-if="completed > 0" class="hud__empty">Выполнено квестов: {{ completed }}</p>
     </section>
-    <section class="hud__cards pixel-panel" aria-label="Карты">
+    <button
+      type="button"
+      class="hud__cards pixel-panel"
+      :aria-label="`Открыть колоду. Карт: ${cardTotal}, в колоде: ${deckSize}`"
+      title="Колода (C)"
+      @click="$emit('openDeck')"
+    >
       <span class="hud__cards-icon" aria-hidden="true" />
       <span>{{ cardTotal }}</span>
       <span class="hud__deck">колода {{ deckSize }}</span>
-    </section>
+    </button>
   </div>
 </template>
 
@@ -91,7 +99,16 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
   gap: 8px;
   align-items: center;
   padding: 12px;
+  font-size: 9px;
+  pointer-events: auto;
+  cursor: pointer;
   background: rgb(42 37 64 / 88%);
+}
+
+.hud__cards:hover,
+.hud__cards:focus-visible {
+  outline: none;
+  background: var(--panel-light);
 }
 
 .hud__cards-icon {
