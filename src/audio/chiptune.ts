@@ -37,7 +37,7 @@ export class ChiptuneAudio {
   private ctx: AudioContext | null = null;
   private musicGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
-  private musicVolume = 0.15;
+  private musicVolume = 0;
   private sfxVolume = 0.25;
   private muted = false;
 
