@@ -12,6 +12,8 @@ import { Emitter } from '../util/emitter';
 import type { Rng } from '../util/rng';
 import { createRng } from '../util/rng';
 import type { MoveInput } from '../world/world';
+import type { SaveData } from './save';
+import { SAVE_VERSION } from './save';
 import { WorldState } from '../world/world';
 
 export interface DialogState {
@@ -72,6 +74,46 @@ export class GameSession {
     this.world = new WorldState(this.content, content.player.startLevel);
     this.quests = new QuestLog(this.content.quest);
     this.cards = new CardCollection(content.deckRules, content.player.starterDeck);
+  }
+
+  /**
+   * Создаёт сессию из сохранения. Всё, чего в текущем контенте уже нет
+   * (уровень, квест, карта), молча отбрасывается — старое сохранение не ломает игру.
+   */
+  static restore(content: GameContent, save: SaveData, options: SessionOptions = {}): GameSession {
+    const session = new GameSession(content, options);
+    const has = (table: Record<string, unknown>, id: string): boolean => Object.hasOwn(table, id);
+
+    if (has(content.levels, save.levelId)) {
+      session.world.loadLevel(save.levelId);
+      session.world.placePlayer(save.player.x, save.player.y, save.player.facing);
+    }
+    session.quests.restore(save.quests.filter((quest) => has(content.quests, quest.id)));
+    const owned = Object.fromEntries(Object.entries(save.cards.owned).filter(([cardId]) => has(content.cards, cardId)));
+    session.cards.restore(owned, save.cards.deck.filter((cardId) => has(content.cards, cardId)));
+    for (const id of save.defeatedBosses) if (has(content.bosses, id)) session.defeatedBosses.add(id);
+    for (const id of save.wonMinigames) if (has(content.minigames, id)) session.wonMinigames.add(id);
+    return session;
+  }
+
+  /**
+   * Снимок прогресса. Мини-игра и бой не сохраняются: их итоги попадают в прогресс
+   * только по завершении, так что загрузка вернёт игрока в мир перед ними.
+   */
+  serialize(): SaveData {
+    const { x, y, facing } = this.world.player;
+    return {
+      version: SAVE_VERSION,
+      levelId: this.world.level.id,
+      player: { x, y, facing },
+      quests: this.quests.snapshot(),
+      cards: {
+        owned: Object.fromEntries(this.cards.list().map(({ cardId, count }) => [cardId, count])),
+        deck: [...this.cards.deck],
+      },
+      defeatedBosses: [...this.defeatedBosses],
+      wonMinigames: [...this.wonMinigames],
+    };
   }
 
   get mode(): Mode {

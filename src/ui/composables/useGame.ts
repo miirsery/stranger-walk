@@ -9,6 +9,7 @@ import { GameSession } from '@core/session/gameSession';
 import { attachAudio } from '@/audio/audioDirector';
 import { audio } from '@/audio/chiptune';
 import { InputHub } from '@/input/inputHub';
+import type { SaveStorage } from '@/platform/saveStorage';
 import type { GameHandle } from '@/render/createGame';
 
 export interface Toast {
@@ -35,16 +36,31 @@ export interface GameBridge {
   /** Открыть или закрыть редактор колоды (доступен только в мире). */
   setDeckOpen: (value: boolean) => void;
   refresh: () => void;
+  /** Имя NPC, с которым сейчас можно заговорить, или null. */
+  interactTarget: Ref<string | null>;
+  /** Записать прогресс прямо сейчас (помимо автосохранения). */
+  saveNow: () => void;
+}
+
+export interface GameOptions {
+  storage: SaveStorage;
+  /** true — продолжить с сохранения, false — начать заново. */
+  continueGame: boolean;
 }
 
 const TOAST_MS = 4000;
+/** Позиция игрока дозаписывается с таким интервалом; важные события сохраняются сразу. */
+const AUTOSAVE_MS = 5000;
 
 /**
  * Мост между ядром игры и Vue: создаёт сессию, запускает рендер и звук,
  * а состояние сессии отражает в реактивные ссылки для компонентов.
  */
-export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
-  const session = new GameSession(gameContent, { seed: Date.now() });
+export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions): GameBridge => {
+  const { storage } = options;
+  const save = options.continueGame ? storage.load() : null;
+  const seed = Date.now();
+  const session = save ? GameSession.restore(gameContent, save, { seed }) : new GameSession(gameContent, { seed });
   const input = new InputHub();
 
   const modeKind = ref<Mode['kind']>('world');
@@ -58,6 +74,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
   const toasts = ref<Toast[]>([]);
   const paused = ref(false);
   const deckOpen = ref(false);
+  const interactTarget = ref<string | null>(null);
 
   let handle: GameHandle | null = null;
   let nextToastId = 1;
@@ -86,8 +103,22 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     deckSize.value = session.cards.deck.length;
   };
 
+  // Сохраняем только из мира и диалога: мини-игра и бой попадают в прогресс по завершении.
+  const saveNow = (): void => {
+    if (session.mode.kind === 'world' || session.mode.kind === 'dialog') storage.save(session.serialize());
+  };
+
+  let hintFrame = 0;
+  const watchInteraction = (): void => {
+    const npc = session.mode.kind === 'world' ? session.world.findInteractableNpc() : undefined;
+    const name = npc ? session.content.npc(npc.npcId).name : null;
+    if (name !== interactTarget.value) interactTarget.value = name;
+    hintFrame = requestAnimationFrame(watchInteraction);
+  };
+
   const onEvent = (event: SessionEvent): void => {
     refresh();
+    if (event.type !== 'dialogAdvanced' && event.type !== 'battleUpdated') saveNow();
     if (event.type === 'questStarted') toast(`Новый квест: ${event.quest.title}`);
     if (event.type === 'questCompleted') toast(`Квест выполнен: ${event.quest.title}`);
     if (event.type === 'cardsGranted') {
@@ -106,6 +137,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
 
   const setDeckOpen = (value: boolean): void => {
     if (value && (session.mode.kind !== 'world' || paused.value)) return;
+    if (!value && deckOpen.value) saveNow();
     deckOpen.value = value;
     syncPause();
   };
@@ -114,6 +146,15 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     // Только в dev-сборке: доступ к сессии из консоли браузера для отладки.
     if (import.meta.env.DEV) Reflect.set(globalThis, '__session', session);
     refresh();
+    saveNow();
+    watchInteraction();
+    const autosave = setInterval(saveNow, AUTOSAVE_MS);
+    window.addEventListener('pagehide', saveNow);
+    cleanups.push(() => {
+      clearInterval(autosave);
+      window.removeEventListener('pagehide', saveNow);
+      cancelAnimationFrame(hintFrame);
+    });
     cleanups.push(session.events.on(onEvent));
     cleanups.push(input.attachKeyboard(window));
     cleanups.push(
@@ -132,6 +173,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
   });
 
   onBeforeUnmount(() => {
+    saveNow();
     for (const cleanup of cleanups) cleanup();
     for (const timer of timers) clearTimeout(timer);
     handle?.destroy();
@@ -140,5 +182,5 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, setPaused, setDeckOpen, refresh };
+  return { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, setPaused, setDeckOpen, refresh, interactTarget, saveNow };
 };

@@ -10,8 +10,8 @@ defineEmits<{ resume: [] }>();
       <h2 class="pause__title">Пауза</h2>
       <p class="pause__keys"><kbd>WASD</kbd> движение · <kbd>E</kbd> действие · <kbd>C</kbd> колода</p>
       <button type="button" class="pixel-button" autofocus @click="$emit('resume')">Продолжить</button>
-      <RouterLink class="pixel-button pixel-button--danger" to="/">Выйти в меню</RouterLink>
-      <p class="pause__note">Прогресс не сохраняется: при выходе игра начнётся заново.</p>
+      <RouterLink class="pixel-button pixel-button--ghost" to="/">Выйти в меню</RouterLink>
+      <p class="pause__note">Прогресс сохраняется автоматически — в меню можно будет нажать «Продолжить».</p>
     </div>
   </div>
 </template>

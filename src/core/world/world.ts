@@ -50,6 +50,15 @@ export class WorldState {
     this.player.moving = false;
   }
 
+  /** Ставит игрока в точку (в пикселях). Возвращает false и ничего не меняет, если там стена. */
+  placePlayer(x: number, y: number, facing: Facing): boolean {
+    if (this.collides(x, y)) return false;
+    this.player.x = x;
+    this.player.y = y;
+    this.player.facing = facing;
+    return true;
+  }
+
   get playerTile(): Point {
     return { x: pixelToTile(this.player.x), y: pixelToTile(this.player.y) };
   }

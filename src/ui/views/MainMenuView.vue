@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { gameContent } from '@content/index';
 import { audio } from '@/audio/chiptune';
+import { localSaveStorage } from '@/platform/saveStorage';
 import { useSettingsStore } from '../stores/settings';
 
 useSettingsStore();
+
+const hasSave = localSaveStorage.exists();
+// Новая игра стирает сохранение, поэтому при его наличии просим подтвердить вторым нажатием.
+const confirmingNew = ref(false);
 
 const items = [
   { to: '/controls', label: 'Управление' },
@@ -26,12 +31,23 @@ onBeforeUnmount(() => audio.playTrack(null));
       <p class="menu__kicker">пиксельная карточная RPG</p>
       <h1 class="menu__title">Stranger<br />Walk</h1>
       <nav class="menu__nav" aria-label="Главное меню">
-        <RouterLink class="pixel-button menu__play" to="/play">▶ Играть</RouterLink>
+        <template v-if="hasSave">
+          <RouterLink class="pixel-button menu__play" :to="{ path: '/play', query: { continue: '1' } }">
+            Продолжить
+          </RouterLink>
+          <RouterLink v-if="confirmingNew" class="pixel-button pixel-button--danger" to="/play">
+            Стереть прогресс и начать
+          </RouterLink>
+          <button v-else type="button" class="pixel-button pixel-button--ghost" @click="confirmingNew = true">
+            Новая игра
+          </button>
+        </template>
+        <RouterLink v-else class="pixel-button menu__play" to="/play">Играть</RouterLink>
         <RouterLink v-for="item in items" :key="item.to" class="pixel-button pixel-button--ghost" :to="item.to">
           {{ item.label }}
         </RouterLink>
       </nav>
-      <p class="menu__version">MVP 0.1 · прогресс пока не сохраняется</p>
+      <p class="menu__version">MVP 0.2 · прогресс сохраняется в этом браузере</p>
     </div>
   </main>
 </template>

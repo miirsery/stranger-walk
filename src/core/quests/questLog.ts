@@ -1,4 +1,5 @@
 import type { ObjectiveDef, QuestDef, QuestStatus } from '../content/types';
+import type { QuestSave } from '../session/save';
 
 /** Игровые события, которые двигают цели квестов. */
 export type ProgressEvent =
@@ -80,6 +81,29 @@ export class QuestLog {
       }
     }
     return progress;
+  }
+
+  /** Снимок для сохранения. */
+  snapshot(): QuestSave[] {
+    return [...this.entries.values()].map((entry) => ({
+      id: entry.def.id,
+      status: entry.status === 'completed' ? 'completed' : 'active',
+      done: [...entry.done],
+    }));
+  }
+
+  /** Восстанавливает журнал из сохранения. Неизвестные цели отбрасываются. */
+  restore(saves: readonly QuestSave[]): void {
+    this.entries.clear();
+    for (const save of saves) {
+      const def = this.resolve(save.id);
+      const known = new Set(def.objectives.map((objective) => objective.id));
+      this.entries.set(def.id, {
+        def,
+        status: save.status,
+        done: new Set(save.done.filter((id) => known.has(id))),
+      });
+    }
   }
 
   /** Взятые квесты в порядке получения. */

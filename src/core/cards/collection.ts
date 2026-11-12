@@ -47,6 +47,23 @@ export class CardCollection {
     }
   }
 
+  /**
+   * Восстанавливает инвентарь и колоду из сохранения. Если сохранённая колода больше
+   * не проходит правила (например, изменился контент), колода собирается заново из инвентаря.
+   */
+  restore(owned: Readonly<Record<CardId, number>>, deck: readonly CardId[]): void {
+    this.owned.clear();
+    this.deckCards = [];
+    for (const [cardId, count] of Object.entries(owned)) {
+      if (count > 0) this.owned.set(cardId, count);
+    }
+    if (this.setDeck(deck).length === 0) return;
+    for (const [cardId, count] of this.owned) {
+      const copies = Math.min(count, this.rules.maxCopies, this.rules.maxSize - this.deckCards.length);
+      for (let i = 0; i < copies; i++) this.deckCards.push(cardId);
+    }
+  }
+
   /** Список нарушений правил колоды; пустой — колода допустима. */
   validateDeck(deck: readonly CardId[]): string[] {
     const errors: string[] = [];
