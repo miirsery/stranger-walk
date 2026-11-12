@@ -13,6 +13,17 @@ export const minigames: Record<string, MinigameDef> = {
     hazardChance: 0.25,
     maxMisses: 3,
     music: 'battle',
-    rewardCards: ['archer'],
+    rewardCards: ['archer', 'feast'],
+  },
+  cargo_sort: {
+    id: 'cargo_sort',
+    type: 'memory',
+    name: 'Опись груза',
+    instructions: 'Открывай по две плитки и находи одинаковые карты. Ошибок — не больше восьми.',
+    cards: ['crab', 'torpedo', 'diver', 'kraken', 'depth_charge', 'fox'],
+    maxMistakes: 8,
+    revealMs: 900,
+    music: 'battle',
+    rewardCards: ['depth_charge'],
   },
 };

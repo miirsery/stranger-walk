@@ -1,4 +1,4 @@
-import type { CardDef, CardId, CardKeyword } from '../content/types';
+import type { CardDef, CardEffect, CardId, CardKeyword } from '../content/types';
 import type { Rng } from '../util/rng';
 import { shuffle } from '../util/rng';
 
@@ -149,8 +149,9 @@ export class CardBattle {
     const own = this.state.sides[side];
     const cardId = own.hand[handIndex];
     if (cardId === undefined) return fail('Нет такой карты в руке');
-    if (this.resolveCard(cardId).cost > own.mana) return fail('Не хватает маны');
-    if (own.board.length >= this.rules.maxBoard) return fail('На столе нет места');
+    const card = this.resolveCard(cardId);
+    if (card.cost > own.mana) return fail('Не хватает маны');
+    if (card.type === 'unit' && own.board.length >= this.rules.maxBoard) return fail('На столе нет места');
     return ok;
   }
 
@@ -161,17 +162,25 @@ export class CardBattle {
     const [cardId] = own.hand.splice(handIndex, 1);
     const card = this.resolveCard(cardId as CardId);
     own.mana -= card.cost;
-    own.board.push({
-      uid: this.nextUid++,
-      cardId: card.id,
-      name: card.name,
-      attack: card.attack,
-      health: card.health,
-      maxHealth: card.health,
-      keywords: [...card.keywords],
-      canAttack: card.keywords.includes('charge'),
-    });
-    this.log(`${own.hero.name}: «${card.name}» выходит на стол`);
+    if (card.type === 'spell') {
+      this.log(`${own.hero.name}: заклинание «${card.name}»`);
+      this.applyEffect(side, card.effect);
+    } else {
+      this.log(`${own.hero.name}: «${card.name}» выходит на стол`);
+      // Эффект выхода срабатывает до появления существа: «усилить союзников» его самого не касается.
+      if (card.onPlay) this.applyEffect(side, card.onPlay);
+      own.board.push({
+        uid: this.nextUid++,
+        cardId: card.id,
+        name: card.name,
+        attack: card.attack,
+        health: card.health,
+        maxHealth: card.health,
+        keywords: [...card.keywords],
+        canAttack: card.keywords.includes('charge'),
+      });
+    }
+    this.checkWinner();
     return ok;
   }
 
@@ -224,6 +233,38 @@ export class CardBattle {
     if (!guard.ok) return guard;
     this.startTurn(opponentOf(side));
     return ok;
+  }
+
+  private applyEffect(side: Side, effect: CardEffect): void {
+    const own = this.state.sides[side];
+    const foe = this.state.sides[opponentOf(side)];
+    switch (effect.type) {
+      case 'damageEnemyHero':
+        foe.hero.health -= effect.amount;
+        this.log(`Герой ${foe.hero.name} получает ${effect.amount} урона`);
+        break;
+      case 'healHero':
+        own.hero.health = Math.min(own.hero.maxHealth, own.hero.health + effect.amount);
+        this.log(`Герой ${own.hero.name} восстанавливает до ${effect.amount} здоровья`);
+        break;
+      case 'draw':
+        for (let i = 0; i < effect.count; i++) this.draw(side);
+        this.log(`${own.hero.name} берёт карты: ${effect.count}`);
+        break;
+      case 'damageAllEnemies':
+        for (const unit of foe.board) unit.health -= effect.amount;
+        this.log(`Все существа героя ${foe.hero.name} получают ${effect.amount} урона`);
+        this.buryDead(foe);
+        break;
+      case 'buffAllies':
+        for (const unit of own.board) {
+          unit.attack += effect.attack;
+          unit.health += effect.health;
+          unit.maxHealth += effect.health;
+        }
+        this.log(`Существа героя ${own.hero.name} получают +${effect.attack}/+${effect.health}`);
+        break;
+    }
   }
 
   private guardTurn(side: Side): ActionResult {

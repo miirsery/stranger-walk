@@ -102,7 +102,7 @@ watch(
         @click="attack({ type: 'hero' })"
       >
         <span class="battle__hero-name">{{ enemy.hero.name }}</span>
-        <span class="battle__hp">♥ {{ Math.max(0, enemy.hero.health) }}</span>
+        <span :key="enemy.hero.health" class="battle__hp">♥ {{ Math.max(0, enemy.hero.health) }}</span>
       </button>
       <p class="battle__meta">Рука: {{ enemy.hand.length }} · Колода: {{ enemy.deck.length }}</p>
     </header>
@@ -146,7 +146,7 @@ watch(
       <div class="battle__status">
         <div class="battle__hero">
           <span class="battle__hero-name">{{ player.hero.name }}</span>
-          <span class="battle__hp">♥ {{ Math.max(0, player.hero.health) }}</span>
+          <span :key="player.hero.health" class="battle__hp">♥ {{ Math.max(0, player.hero.health) }}</span>
         </div>
         <p class="battle__mana" :aria-label="`Мана: ${player.mana} из ${player.maxMana}`">
           <span v-for="index in player.maxMana" :key="index" class="battle__crystal" :class="{ 'battle__crystal--spent': index > player.mana }" />
@@ -244,6 +244,14 @@ watch(
 
 .battle__hp {
   color: var(--red);
+  animation: hp-change 0.3s steps(3);
+}
+
+@keyframes hp-change {
+  0% {
+    color: var(--text);
+    transform: scale(1.5);
+  }
 }
 
 .battle__meta {

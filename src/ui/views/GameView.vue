@@ -4,6 +4,7 @@ import BattleOverlay from '../components/BattleOverlay.vue';
 import DeckOverlay from '../components/DeckOverlay.vue';
 import DialogBox from '../components/DialogBox.vue';
 import GameHud from '../components/GameHud.vue';
+import MemoryBoard from '../components/MemoryBoard.vue';
 import MinigameHud from '../components/MinigameHud.vue';
 import PauseMenu from '../components/PauseMenu.vue';
 import TouchControls from '../components/TouchControls.vue';
@@ -12,13 +13,14 @@ import { useSettingsStore } from '../stores/settings';
 
 const container = ref<HTMLElement | null>(null);
 const game = useGame(container);
-const { session, input, modeKind, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen } = game;
+const { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen } = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
 const showTouch = computed(
   () =>
     modeKind.value !== 'battle' &&
+    minigameType.value !== 'memory' &&
     !paused.value &&
     !deckOpen.value &&
     (settings.touchControls === 'on' || (settings.touchControls === 'auto' && coarsePointer)),
@@ -50,6 +52,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       @open-deck="game.setDeckOpen(true)"
     />
     <MinigameHud v-if="modeKind === 'minigame'" :session="session" />
+    <MemoryBoard v-if="minigameType === 'memory'" :session="session" />
     <BattleOverlay v-if="battle" :session="session" :state="battle" />
     <TouchControls v-if="showTouch" :input="input" />
     <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />

@@ -89,8 +89,14 @@ export const npcs: Record<string, NpcDef> = {
         when: [{ type: 'questStatus', questId: 'deep_cargo', status: 'active' }],
         lines: [
           'Капитан прислала? Так бы сразу и сказал.',
-          'Забирай ящик. Торпеда, Водолаз и сам Кракен — обращайся с ними бережно.',
+          'Только карты в ящике перемешались. Помоги разобрать их по парам — и забирай.',
         ],
+        effects: [{ type: 'startMinigame', minigameId: 'cargo_sort' }],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'deep_cargo', status: 'completed' }],
+        lines: ['Турбины гудят ровно. Хочешь ещё раз разобрать ящик?'],
+        effects: [{ type: 'startMinigame', minigameId: 'cargo_sort' }],
       },
       { lines: ['Турбины гудят ровно. Значит, день хороший.'] },
     ],

@@ -1,4 +1,17 @@
-import type { Condition, Effect, GameContent, LevelDef, Point, SettingDef } from './types';
+import type { CardEffect, Condition, Effect, GameContent, LevelDef, Point, SettingDef } from './types';
+
+const effectIsValid = (effect: CardEffect): boolean => {
+  switch (effect.type) {
+    case 'damageEnemyHero':
+    case 'healHero':
+    case 'damageAllEnemies':
+      return effect.amount > 0;
+    case 'draw':
+      return effect.count > 0;
+    case 'buffAllies':
+      return effect.attack >= 0 && effect.health >= 0 && effect.attack + effect.health > 0;
+  }
+};
 
 /**
  * Проверяет ссылочную целостность контента. Возвращает список проблем (пустой — всё в порядке).
@@ -132,7 +145,12 @@ export const validateContent = (content: GameContent): string[] => {
 
   for (const card of Object.values(content.cards)) {
     need(content.settings, 'сеттинг', card.setting, `Карта ${card.id}`);
-    if (card.cost < 0 || card.attack < 0 || card.health <= 0) errors.push(`Карта ${card.id}: некорректные характеристики`);
+    if (card.cost < 0) errors.push(`Карта ${card.id}: отрицательная стоимость`);
+    if (card.type === 'unit' && (card.attack < 0 || card.health <= 0)) {
+      errors.push(`Карта ${card.id}: некорректные характеристики`);
+    }
+    const effect = card.type === 'unit' ? card.onPlay : card.effect;
+    if (effect && !effectIsValid(effect)) errors.push(`Карта ${card.id}: некорректный эффект`);
   }
 
   for (const boss of Object.values(content.bosses)) {
@@ -146,6 +164,12 @@ export const validateContent = (content: GameContent): string[] => {
   for (const minigame of Object.values(content.minigames)) {
     need(content.music, 'трек', minigame.music, `Мини-игра ${minigame.id}`);
     needCards(minigame.rewardCards, `Мини-игра ${minigame.id}`);
+    if (minigame.type === 'memory') {
+      needCards(minigame.cards, `Мини-игра ${minigame.id}`);
+      if (new Set(minigame.cards).size !== minigame.cards.length || minigame.cards.length < 2) {
+        errors.push(`Мини-игра ${minigame.id}: нужны минимум 2 разные карты без повторов`);
+      }
+    }
   }
 
   need(content.levels, 'уровень', content.player.startLevel, 'Игрок');

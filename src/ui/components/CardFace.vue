@@ -15,22 +15,30 @@ const props = defineProps<{
 const KEYWORD_LABELS: Record<CardKeyword, string> = { guard: 'Защитник', charge: 'Рывок' };
 
 const tintCss = computed(() => `#${props.tint.toString(16).padStart(6, '0')}`);
-const health = computed(() => props.health ?? props.card.health);
-const damaged = computed(() => health.value < props.card.health);
+const unit = computed(() => (props.card.type === 'unit' ? props.card : null));
+const attack = computed(() => props.attack ?? unit.value?.attack ?? 0);
+const health = computed(() => props.health ?? unit.value?.health ?? 0);
+const damaged = computed(() => unit.value !== null && health.value < unit.value.health);
+const buffed = computed(() => unit.value !== null && (health.value > unit.value.health || attack.value > unit.value.attack));
 </script>
 
 <template>
-  <span class="card" :class="[`card--${card.rarity}`, { 'card--compact': compact }]">
+  <span class="card" :class="[`card--${card.rarity}`, { 'card--compact': compact, 'card--spell': !unit }]">
     <span class="card__cost" aria-label="Стоимость">{{ card.cost }}</span>
     <span class="card__art" :style="{ background: tintCss }" aria-hidden="true">{{ card.name.charAt(0) }}</span>
     <span class="card__name">{{ card.name }}</span>
-    <span v-if="card.keywords.length" class="card__keywords">
-      {{ card.keywords.map((keyword) => KEYWORD_LABELS[keyword]).join(' · ') }}
+    <span v-if="unit && unit.keywords.length" class="card__keywords">
+      {{ unit.keywords.map((keyword) => KEYWORD_LABELS[keyword]).join(' · ') }}
     </span>
-    <span class="card__stats">
-      <span class="card__attack" aria-label="Атака">{{ attack ?? card.attack }}</span>
-      <span class="card__health" :class="{ 'card__health--damaged': damaged }" aria-label="Здоровье">{{ health }}</span>
+    <span v-else-if="unit?.onPlay" class="card__keywords">При выходе</span>
+    <span v-if="unit" class="card__stats" :class="{ 'card__stats--buffed': buffed }">
+      <span class="card__attack" aria-label="Атака">{{ attack }}</span>
+      <!-- key по здоровью перезапускает анимацию удара при каждом изменении -->
+      <span :key="health" class="card__health" :class="{ 'card__health--damaged': damaged }" aria-label="Здоровье">
+        {{ health }}
+      </span>
     </span>
+    <span v-else class="card__spell">Заклинание</span>
   </span>
 </template>
 
@@ -135,8 +143,37 @@ const damaged = computed(() => health.value < props.card.health);
   background: #c23b3b;
 }
 
+.card__health {
+  animation: card-hit 0.25s steps(3);
+}
+
 .card__health--damaged {
   color: #ffd0c9;
   background: #7d2424;
+}
+
+.card__stats--buffed .card__attack {
+  box-shadow: 0 0 0 2px var(--green);
+}
+
+.card--spell {
+  background: #e3dcf5;
+}
+
+.card--spell .card__art {
+  border-radius: 50%;
+}
+
+.card__spell {
+  grid-row: 4;
+  font-size: 6px;
+  color: #7a4fb5;
+  text-transform: uppercase;
+}
+
+@keyframes card-hit {
+  0% {
+    transform: scale(1.6);
+  }
 }
 </style>

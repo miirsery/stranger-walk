@@ -41,7 +41,7 @@ const record = (session: GameSession): SessionEvent[] => {
 const winMinigame = (session: GameSession): void => {
   for (let i = 0; i < 5000; i++) {
     const mode = session.mode;
-    if (mode.kind !== 'minigame') return;
+    if (mode.kind !== 'minigame' || mode.game.type !== 'catch') return;
     const game = mode.game;
     const hazardNear = game.items.some((item) => item.kind === 'hazard' && item.y > 80 && Math.abs(item.x - game.basketX) < 22);
     const target = game.items.filter((item) => item.kind === 'good').sort((a, b) => b.y - a.y)[0];
@@ -52,6 +52,19 @@ const winMinigame = (session: GameSession): void => {
     }
     session.update(16, { x: axis, y: 0 });
   }
+};
+
+/** Собирает все пары в мини-игре на память (тест видит карты «насквозь»). */
+const solveMemory = (session: GameSession): void => {
+  const mode = session.mode;
+  if (mode.kind !== 'minigame' || mode.game.type !== 'memory') throw new Error('ожидалась мини-игра на память');
+  const game = mode.game;
+  for (const cardId of game.def.cards) {
+    game.tiles.forEach((tile, index) => {
+      if (tile.cardId === cardId) game.flip(index);
+    });
+  }
+  session.update(16, idle);
 };
 
 describe('GameSession', () => {
@@ -125,7 +138,10 @@ describe('GameSession', () => {
     expect(session.world.level.id).toBe('submarine');
     talk(session, { x: 3, y: 5 });
     talk(session, { x: 25, y: 3 });
+    solveMemory(session);
+    skipDialog(session);
     expect(session.quests.status('deep_cargo')).toBe('completed');
+    expect(session.cards.count('depth_charge')).toBe(1);
     expect(session.cards.count('kraken')).toBe(1);
     talk(session, { x: 3, y: 5 });
     expect(session.quests.status('final_game')).toBe('active');

@@ -10,9 +10,9 @@ export const bosses: Record<string, BossDef> = {
     music: 'battle',
     deck: [
       'squire', 'squire', 'archer', 'archer', 'crab', 'crab',
-      'knight', 'knight', 'gargoyle', 'gargoyle', 'reaper', 'shadow',
+      'knight', 'knight', 'gargoyle', 'gargoyle', 'banner', 'shadow',
     ],
-    rewardCards: ['gargoyle', 'astronaut', 'turret'],
+    rewardCards: ['gargoyle', 'banner', 'astronaut', 'turret'],
     winLines: ['Невозможно… Моя колода повержена.', 'Забирай карты, Странник. Миры снова открыты.'],
     loseLines: ['Слабо. Возвращайся, когда соберёшь колоду получше.'],
   },
@@ -25,9 +25,9 @@ export const bosses: Record<string, BossDef> = {
     music: 'battle',
     deck: [
       'drone', 'drone', 'astronaut', 'astronaut', 'turret', 'turret',
-      'shield', 'shield', 'comet', 'comet', 'knight', 'kraken', 'titan',
+      'shield', 'shield', 'comet', 'comet', 'meteor', 'meteor', 'star_map', 'kraken', 'titan',
     ],
-    rewardCards: ['comet', 'shield'],
+    rewardCards: ['comet', 'meteor', 'star_map'],
     winLines: ['Чистая победа. Карты твои — и звёздные карты тоже.', 'Продолжение следует…'],
     loseLines: ['В космосе никто не услышит, как ты сдаёшься. Попробуй ещё.'],
   },

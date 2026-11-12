@@ -134,19 +134,42 @@ export type CardRarity = 'common' | 'rare' | 'epic' | 'legendary';
 /** guard — враг обязан атаковать это существо первым; charge — атакует в ход розыгрыша. */
 export type CardKeyword = 'guard' | 'charge';
 
-export interface CardDef {
+/** Эффекты без выбора цели — срабатывают при розыгрыше карты. */
+export type CardEffect =
+  | { type: 'damageEnemyHero'; amount: number }
+  | { type: 'healHero'; amount: number }
+  | { type: 'draw'; count: number }
+  /** Урон всем существам противника. */
+  | { type: 'damageAllEnemies'; amount: number }
+  /** Усиление всех своих существ, уже стоящих на столе. */
+  | { type: 'buffAllies'; attack: number; health: number };
+
+interface CardBase {
   id: CardId;
-  /** Дискриминатор на будущее: заклинания, артефакты и т.п. */
-  type: 'unit';
   name: string;
   cost: number;
-  attack: number;
-  health: number;
   rarity: CardRarity;
   setting: SettingId;
-  keywords: CardKeyword[];
   text: string;
 }
+
+/** Существо: остаётся на столе и атакует. */
+export interface UnitCardDef extends CardBase {
+  type: 'unit';
+  attack: number;
+  health: number;
+  keywords: CardKeyword[];
+  /** Необязательный эффект в момент выхода на стол. */
+  onPlay?: CardEffect;
+}
+
+/** Заклинание: срабатывает один раз и уходит. */
+export interface SpellCardDef extends CardBase {
+  type: 'spell';
+  effect: CardEffect;
+}
+
+export type CardDef = UnitCardDef | SpellCardDef;
 
 export interface DeckRules {
   minSize: number;
@@ -186,8 +209,22 @@ export interface CatchMinigameDef {
   rewardCards: CardId[];
 }
 
+/** «Найди пару»: на поле по две копии каждой карты из `cards`. */
+export interface MemoryMinigameDef {
+  id: MinigameId;
+  type: 'memory';
+  name: string;
+  instructions: string;
+  cards: CardId[];
+  maxMistakes: number;
+  /** Сколько миллисекунд несовпавшая пара остаётся открытой. */
+  revealMs: number;
+  music: TrackId;
+  rewardCards: CardId[];
+}
+
 /** Новые типы мини-игр добавляются в это объединение (и в фабрику `createMinigame`). */
-export type MinigameDef = CatchMinigameDef;
+export type MinigameDef = CatchMinigameDef | MemoryMinigameDef;
 
 // ---------- Музыка ----------
 

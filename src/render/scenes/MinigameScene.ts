@@ -11,6 +11,7 @@ import { ensureIconTexture } from '../textures';
 export class MinigameScene extends Phaser.Scene {
   private ctx!: RenderContext;
   private basket!: Phaser.GameObjects.Image;
+  private drawsField = false;
   private readonly items = new Map<number, Phaser.GameObjects.Image>();
 
   constructor() {
@@ -20,6 +21,12 @@ export class MinigameScene extends Phaser.Scene {
   create(): void {
     this.ctx = getRenderContext(this);
     this.items.clear();
+    this.cameras.main.setBackgroundColor(0x14121f);
+
+    const mode = this.ctx.session.mode;
+    this.drawsField = mode.kind === 'minigame' && mode.game.type === 'catch';
+    // Игры без «поля» (например, память) рисует Vue; сцена лишь двигает время сессии.
+    if (!this.drawsField) return;
 
     ensureIconTexture(this, 'catch-good', CATCH_ITEM_SIZE, CATCH_ITEM_SIZE, [
       { color: 0x14121f, rects: [[1, 1, 6, 7], [0, 2, 8, 5]] },
@@ -43,7 +50,6 @@ export class MinigameScene extends Phaser.Scene {
     this.add.rectangle(0, CATCH_FIELD.height - 4, CATCH_FIELD.width, 4, 0x4c9a4a).setOrigin(0);
     this.basket = this.add.image(0, 0, basketKey).setOrigin(0.5, 0);
 
-    this.cameras.main.setBackgroundColor(0x14121f);
     this.fitCamera();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -55,7 +61,7 @@ export class MinigameScene extends Phaser.Scene {
     const { session, input, paused } = this.ctx;
     if (!paused) session.update(delta, input.getMove());
     const mode = session.mode;
-    if (mode.kind !== 'minigame') return;
+    if (mode.kind !== 'minigame' || mode.game.type !== 'catch' || !this.drawsField) return;
     const game = mode.game;
 
     this.basket.setPosition(Math.round(game.basketX), CATCH_BASKET.y);

@@ -2,6 +2,7 @@ import type { Ref, ShallowRef } from 'vue';
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { gameContent } from '@content/index';
 import type { BattleState } from '@core/battle/cardBattle';
+import type { MinigameDef } from '@core/content/types';
 import type { QuestView } from '@core/quests/questLog';
 import type { DialogState, Mode, SessionEvent } from '@core/session/gameSession';
 import { GameSession } from '@core/session/gameSession';
@@ -19,6 +20,8 @@ export interface GameBridge {
   session: GameSession;
   input: InputHub;
   modeKind: Ref<Mode['kind']>;
+  /** Тип идущей мини-игры — UI решает, что рисовать поверх канваса. */
+  minigameType: Ref<MinigameDef['type'] | null>;
   levelName: Ref<string>;
   dialog: ShallowRef<DialogState | null>;
   battle: ShallowRef<BattleState | null>;
@@ -45,6 +48,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
   const input = new InputHub();
 
   const modeKind = ref<Mode['kind']>('world');
+  const minigameType = ref<MinigameDef['type'] | null>(null);
   const levelName = ref('');
   const dialog = shallowRef<DialogState | null>(null);
   const battle = shallowRef<BattleState | null>(null);
@@ -73,6 +77,7 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
   const refresh = (): void => {
     const mode = session.mode;
     modeKind.value = mode.kind;
+    minigameType.value = mode.kind === 'minigame' ? mode.def.type : null;
     levelName.value = session.world.level.name;
     dialog.value = mode.kind === 'dialog' ? { ...mode.dialog } : null;
     battle.value = mode.kind === 'battle' ? mode.battle.snapshot() : null;
@@ -135,5 +140,5 @@ export const useGame = (container: Ref<HTMLElement | null>): GameBridge => {
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, setPaused, setDeckOpen, refresh };
+  return { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, setPaused, setDeckOpen, refresh };
 };

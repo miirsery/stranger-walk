@@ -4,27 +4,41 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps<{ session: GameSession }>();
 
+interface Stat {
+  text: string;
+  tone?: 'bad';
+}
+
 const name = ref('');
 const instructions = ref('');
-const score = ref(0);
-const target = ref(0);
-const misses = ref(0);
-const maxMisses = ref(0);
-const seconds = ref(0);
+const stats = ref<Stat[]>([]);
 
 let frame = 0;
+let signature = '';
 
 // Состояние мини-игры меняется каждый кадр — читаем его в ритме отрисовки, а не событиями.
 const tick = (): void => {
   const mode = props.session.mode;
   if (mode.kind === 'minigame') {
+    const game = mode.game;
+    const next: Stat[] =
+      game.type === 'catch'
+        ? [
+            { text: `Счёт ${game.score}/${game.def.targetScore}` },
+            { text: `Промахи ${game.misses}/${game.def.maxMisses}`, tone: 'bad' },
+            { text: `Время ${Math.ceil(game.timeLeftMs / 1000)}` },
+          ]
+        : [
+            { text: `Пары ${game.matchedPairs}/${game.totalPairs}` },
+            { text: `Ошибки ${game.mistakes}/${game.def.maxMistakes}`, tone: 'bad' },
+          ];
+    const nextSignature = next.map((stat) => stat.text).join('|');
+    if (nextSignature !== signature) {
+      signature = nextSignature;
+      stats.value = next;
+    }
     name.value = mode.def.name;
     instructions.value = mode.def.instructions;
-    score.value = mode.game.score;
-    target.value = mode.def.targetScore;
-    misses.value = mode.game.misses;
-    maxMisses.value = mode.def.maxMisses;
-    seconds.value = Math.ceil(mode.game.timeLeftMs / 1000);
   }
   frame = requestAnimationFrame(tick);
 };
@@ -37,9 +51,7 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
   <div class="minigame">
     <div class="minigame__bar pixel-panel">
       <span class="minigame__name">{{ name }}</span>
-      <span>Счёт {{ score }}/{{ target }}</span>
-      <span class="minigame__misses">Промахи {{ misses }}/{{ maxMisses }}</span>
-      <span>Время {{ seconds }}</span>
+      <span v-for="stat in stats" :key="stat.text" :class="{ 'minigame__bad': stat.tone === 'bad' }">{{ stat.text }}</span>
     </div>
     <p class="minigame__help pixel-panel">{{ instructions }}</p>
   </div>
@@ -48,7 +60,7 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
 <style scoped>
 .minigame {
   position: absolute;
-  inset: 12px 72px 12px 72px;
+  inset: 12px 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -69,13 +81,12 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
   color: var(--gold);
 }
 
-.minigame__misses {
+.minigame__bad {
   color: var(--red);
 }
 
 .minigame__help {
   padding: 10px 12px;
-  margin-bottom: 96px;
   color: var(--muted);
   text-align: center;
 }

@@ -15,7 +15,10 @@ export const quests: Record<string, QuestDef> = {
     id: 'deep_cargo',
     title: 'Глубинный груз',
     description: 'Забери у механика ящик с картами глубин.',
-    objectives: [{ id: 'talk_engineer', text: 'Найди механика в кормовом отсеке', type: 'talkTo', npcId: 'engineer' }],
+    objectives: [
+      { id: 'talk_engineer', text: 'Найди механика в кормовом отсеке', type: 'talkTo', npcId: 'engineer' },
+      { id: 'win_cargo', text: 'Помоги с описью груза', type: 'winMinigame', minigameId: 'cargo_sort' },
+    ],
     rewardCards: ['torpedo', 'diver', 'kraken'],
   },
   final_game: {
