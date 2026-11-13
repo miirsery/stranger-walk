@@ -31,16 +31,19 @@ export interface GameBridge {
   deckSize: Ref<number>;
   toasts: Ref<Toast[]>;
   paused: Ref<boolean>;
-  deckOpen: Ref<boolean>;
+  /** Открытая поверх мира панель: редактор колоды или журнал. */
+  panel: Ref<GamePanel | null>;
   setPaused: (value: boolean) => void;
-  /** Открыть или закрыть редактор колоды (доступен только в мире). */
-  setDeckOpen: (value: boolean) => void;
+  /** Открыть панель или закрыть текущую (null). Панели доступны только в мире. */
+  setPanel: (value: GamePanel | null) => void;
   refresh: () => void;
   /** Имя NPC, с которым сейчас можно заговорить, или null. */
   interactTarget: Ref<string | null>;
   /** Записать прогресс прямо сейчас (помимо автосохранения). */
   saveNow: () => void;
 }
+
+export type GamePanel = 'deck' | 'journal';
 
 export interface GameOptions {
   storage: SaveStorage;
@@ -73,7 +76,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
   const deckSize = ref(0);
   const toasts = ref<Toast[]>([]);
   const paused = ref(false);
-  const deckOpen = ref(false);
+  const panel = ref<GamePanel | null>(null);
   const interactTarget = ref<string | null>(null);
 
   let handle: GameHandle | null = null;
@@ -127,18 +130,18 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     }
   };
 
-  // Мир замирает и на паузе, и пока открыт редактор колоды.
-  const syncPause = (): void => handle?.setPaused(paused.value || deckOpen.value);
+  // Мир замирает и на паузе, и пока открыта панель.
+  const syncPause = (): void => handle?.setPaused(paused.value || panel.value !== null);
 
   const setPaused = (value: boolean): void => {
     paused.value = value;
     syncPause();
   };
 
-  const setDeckOpen = (value: boolean): void => {
+  const setPanel = (value: GamePanel | null): void => {
     if (value && (session.mode.kind !== 'world' || paused.value)) return;
-    if (!value && deckOpen.value) saveNow();
-    deckOpen.value = value;
+    if (panel.value === 'deck') saveNow();
+    panel.value = value;
     syncPause();
   };
 
@@ -157,9 +160,10 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     });
     cleanups.push(session.events.on(onEvent));
     cleanups.push(input.attachKeyboard(window));
+    cleanups.push(input.attachGamepad(() => navigator.getGamepads()));
     cleanups.push(
       input.onAction(() => {
-        if (!paused.value && !deckOpen.value) session.interact();
+        if (!paused.value && panel.value === null) session.interact();
       }),
     );
     audio.unlock();
@@ -182,5 +186,5 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, setPaused, setDeckOpen, refresh, interactTarget, saveNow };
+  return { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, setPaused, setPanel, refresh, interactTarget, saveNow };
 };

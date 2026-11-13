@@ -6,6 +6,7 @@ import BattleOverlay from '../components/BattleOverlay.vue';
 import DeckOverlay from '../components/DeckOverlay.vue';
 import DialogBox from '../components/DialogBox.vue';
 import GameHud from '../components/GameHud.vue';
+import JournalOverlay from '../components/JournalOverlay.vue';
 import MemoryBoard from '../components/MemoryBoard.vue';
 import MinigameHud from '../components/MinigameHud.vue';
 import PauseMenu from '../components/PauseMenu.vue';
@@ -17,7 +18,7 @@ const container = ref<HTMLElement | null>(null);
 const route = useRoute();
 const router = useRouter();
 const game = useGame(container, { storage: localSaveStorage, continueGame: route.query.continue === '1' });
-const { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, deckOpen, interactTarget } = game;
+const { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, interactTarget } = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -26,16 +27,18 @@ const showTouch = computed(
     modeKind.value !== 'battle' &&
     minigameType.value !== 'memory' &&
     !paused.value &&
-    !deckOpen.value &&
+    panel.value === null &&
     (settings.touchControls === 'on' || (settings.touchControls === 'auto' && coarsePointer)),
 );
 
 const onKeyDown = (event: KeyboardEvent): void => {
   if (event.code === 'Escape') {
-    if (deckOpen.value) game.setDeckOpen(false);
+    if (panel.value) game.setPanel(null);
     else game.setPaused(!paused.value);
   } else if (event.code === 'KeyC' && !event.repeat) {
-    game.setDeckOpen(!deckOpen.value);
+    game.setPanel(panel.value === 'deck' ? null : 'deck');
+  } else if (event.code === 'KeyJ' && !event.repeat) {
+    game.setPanel(panel.value === 'journal' ? null : 'journal');
   }
 };
 
@@ -57,13 +60,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       :quests="quests"
       :card-total="cardTotal"
       :deck-size="deckSize"
-      @open-deck="game.setDeckOpen(true)"
+      @open-deck="game.setPanel('deck')"
+      @open-journal="game.setPanel('journal')"
     />
     <MinigameHud v-if="modeKind === 'minigame'" :session="session" />
     <MemoryBoard v-if="minigameType === 'memory'" :session="session" />
     <BattleOverlay v-if="battle" :session="session" :state="battle" />
     <TouchControls v-if="showTouch" :input="input" />
-    <p v-if="interactTarget && !paused && !deckOpen" class="pixel-panel game__hint">
+    <p v-if="interactTarget && !paused && !panel" class="pixel-panel game__hint">
       <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> поговорить: {{ interactTarget }}
     </p>
     <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
@@ -72,10 +76,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>
     </ul>
 
-    <DeckOverlay v-if="deckOpen" :session="session" @close="game.setDeckOpen(false)" @changed="game.refresh()" />
+    <DeckOverlay v-if="panel === 'deck'" :session="session" @close="game.setPanel(null)" @changed="game.refresh()" />
+    <JournalOverlay v-if="panel === 'journal'" :session="session" :quests="quests" @close="game.setPanel(null)" />
 
     <button
-      v-if="!paused && !deckOpen"
+      v-if="!paused && !panel"
       type="button"
       class="pixel-button pixel-button--ghost game__pause"
       aria-label="Пауза"

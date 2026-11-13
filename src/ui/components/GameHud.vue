@@ -9,7 +9,7 @@ const props = defineProps<{
   deckSize: number;
 }>();
 
-defineEmits<{ openDeck: [] }>();
+defineEmits<{ openDeck: []; openJournal: [] }>();
 
 const active = computed(() => props.quests.filter((quest) => quest.status === 'active'));
 const completed = computed(() => props.quests.filter((quest) => quest.status === 'completed').length);
@@ -17,24 +17,30 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
 
 <template>
   <div class="hud">
-    <section class="hud__quests pixel-panel" aria-label="Задания">
-      <p class="hud__level">{{ levelName }}</p>
-      <p v-if="quests.length === 0" class="hud__empty">Заданий пока нет. Поговори с кем-нибудь.</p>
-      <div v-for="quest in active" :key="quest.def.id" class="hud__quest">
-        <h2 class="hud__quest-title">{{ quest.def.title }}</h2>
-        <ul class="hud__objectives">
-          <li
-            v-for="objective in quest.objectives"
-            :key="objective.def.id"
-            :class="{ 'hud__objective--done': objective.done }"
-          >
-            <span aria-hidden="true">{{ objective.done ? '■' : '□' }}</span>
-            {{ objective.def.text }}
-          </li>
-        </ul>
-      </div>
-      <p v-if="completed > 0" class="hud__empty">Выполнено квестов: {{ completed }}</p>
-    </section>
+    <button
+      type="button"
+      class="hud__quests pixel-panel"
+      aria-label="Открыть журнал заданий"
+      title="Журнал (J)"
+      @click="$emit('openJournal')"
+    >
+      <!-- Внутри кнопки допустимы только строчные элементы, поэтому span вместо p/h2/ul. -->
+      <span class="hud__level">{{ levelName }}</span>
+      <span v-if="quests.length === 0" class="hud__empty">Заданий пока нет. Поговори с кем-нибудь.</span>
+      <span v-for="quest in active" :key="quest.def.id" class="hud__quest">
+        <span class="hud__quest-title">{{ quest.def.title }}</span>
+        <span
+          v-for="objective in quest.objectives"
+          :key="objective.def.id"
+          class="hud__objective"
+          :class="{ 'hud__objective--done': objective.done }"
+        >
+          <span aria-hidden="true">{{ objective.done ? '■' : '□' }}</span>
+          {{ objective.def.text }}
+        </span>
+      </span>
+      <span v-if="completed > 0" class="hud__empty">Выполнено квестов: {{ completed }}</span>
+    </button>
     <button
       type="button"
       class="hud__cards pixel-panel"
@@ -66,7 +72,18 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
   gap: 8px;
   max-width: min(300px, 62vw);
   padding: 12px;
+  font-size: 9px;
+  line-height: 1.7;
+  text-align: left;
+  pointer-events: auto;
+  cursor: pointer;
   background: rgb(42 37 64 / 88%);
+}
+
+.hud__quests:hover,
+.hud__quests:focus-visible {
+  outline: none;
+  background: rgb(59 53 88 / 94%);
 }
 
 .hud__level {
@@ -82,12 +99,13 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
   color: var(--blue);
 }
 
-.hud__objectives {
+.hud__quest {
   display: grid;
   gap: 4px;
-  padding: 0;
-  margin: 4px 0 0;
-  list-style: none;
+}
+
+.hud__objective {
+  display: block;
 }
 
 .hud__objective--done {

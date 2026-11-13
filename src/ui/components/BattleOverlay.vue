@@ -3,6 +3,7 @@ import type { AttackTarget, BattleState, UnitState } from '@core/battle/cardBatt
 import type { CardDef } from '@core/content/types';
 import type { GameSession } from '@core/session/gameSession';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { useSettingsStore } from '../stores/settings';
 import CardFace from './CardFace.vue';
 
 const props = defineProps<{ session: GameSession; state: BattleState }>();
@@ -31,6 +32,34 @@ const runEnemyTurn = (): void => {
     if (!props.session.battleEnemyStep()) stopEnemy();
   }, ENEMY_STEP_MS);
 };
+
+// ---------- Обучение в первом бою ----------
+// Шаг сменяется сам, когда игрок выполнил то, о чём подсказка.
+const settings = useSettingsStore();
+const TUTORIAL_STEPS = [
+  'Число в синем углу карты — её цена в мане. Нажми на подсвеченную карту в руке, чтобы сыграть её.',
+  'Существо сможет атаковать только со следующего хода. Нажми «Конец хода» — мана восполнится и вырастет на 1.',
+  'Теперь атакуй: нажми на своё подсвеченное существо, затем на цель — существо врага или его героя.',
+  'Если у врага есть «Защитник», сначала придётся бить его. Доведи здоровье героя врага до нуля — и победа твоя!',
+] as const;
+const tutorialStep = ref(settings.battleTutorialDone ? TUTORIAL_STEPS.length : 0);
+const tutorialText = computed(() => TUTORIAL_STEPS[tutorialStep.value] ?? null);
+const playerAttacked = ref(false);
+
+const finishTutorial = (): void => {
+  tutorialStep.value = TUTORIAL_STEPS.length;
+  settings.battleTutorialDone = true;
+};
+
+watch(
+  () => props.state,
+  (state) => {
+    if (tutorialStep.value === 0 && state.sides.player.board.length > 0) tutorialStep.value = 1;
+    if (tutorialStep.value === 1 && state.turn >= 3 && state.active === 'player') tutorialStep.value = 2;
+    if (tutorialStep.value === 2 && playerAttacked.value) tutorialStep.value = 3;
+    if (state.winner && tutorialStep.value < TUTORIAL_STEPS.length) finishTutorial();
+  },
+);
 
 const card = (cardId: string): CardDef => props.session.content.card(cardId);
 const tint = (cardId: string): number => props.session.content.setting(card(cardId).setting).backgroundColor;
@@ -70,8 +99,12 @@ const attack = (target: AttackTarget): void => {
     message.value = 'Сначала выбери своё существо';
     return;
   }
-  report(props.session.battleAttack(selectedUid.value, target));
+  const result = props.session.battleAttack(selectedUid.value, target);
+  if (result.ok) playerAttacked.value = true;
+  report(result);
   selectedUid.value = null;
+  // Снимок боя уже обновился до установки флага — продвигаем обучение вручную.
+  if (result.ok && tutorialStep.value === 2) tutorialStep.value = 3;
 };
 
 const endTurn = (): void => {
@@ -143,6 +176,13 @@ watch(
     </div>
 
     <footer class="battle__side battle__side--player">
+      <aside v-if="tutorialText && !state.winner" class="pixel-panel battle__tutorial" aria-live="polite">
+        <p class="battle__tutorial-step">Обучение · {{ tutorialStep + 1 }}/{{ TUTORIAL_STEPS.length }}</p>
+        <p>{{ tutorialText }}</p>
+        <button type="button" class="pixel-button pixel-button--ghost battle__tutorial-skip" @click="finishTutorial">
+          {{ tutorialStep === TUTORIAL_STEPS.length - 1 ? 'Понятно' : 'Пропустить' }}
+        </button>
+      </aside>
       <div class="battle__status">
         <div class="battle__hero">
           <span class="battle__hero-name">{{ player.hero.name }}</span>
@@ -375,6 +415,29 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.battle__tutorial {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 8px;
+  max-width: 620px;
+  padding: 12px;
+  font-size: 8px;
+  background: rgb(42 37 64 / 96%);
+  box-shadow:
+    inset 0 0 0 var(--px) var(--gold),
+    0 var(--px) 0 var(--px) rgb(0 0 0 / 35%);
+}
+
+.battle__tutorial-step {
+  color: var(--gold);
+}
+
+.battle__tutorial-skip {
+  justify-self: end;
+  padding: 6px 10px;
+  font-size: 8px;
 }
 
 .battle__result {

@@ -8,11 +8,13 @@ interface StoredSettings {
   musicVolume: number;
   sfxVolume: number;
   touchControls: TouchControlsMode;
+  /** Игрок уже прошёл (или пропустил) обучение карточному бою. */
+  battleTutorialDone: boolean;
 }
 
 // v3: музыка по умолчанию выключена — старые сохранённые значения не подхватываются.
 const STORAGE_KEY = 'stranger-walk:settings:v3';
-const DEFAULTS: StoredSettings = { musicVolume: 0, sfxVolume: 0.25, touchControls: 'auto' };
+const DEFAULTS: StoredSettings = { musicVolume: 0, sfxVolume: 0.25, touchControls: 'auto', battleTutorialDone: false };
 
 const clamp01 = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;
@@ -26,6 +28,7 @@ const load = (): StoredSettings => {
       musicVolume: clamp01(data.musicVolume, DEFAULTS.musicVolume),
       sfxVolume: clamp01(data.sfxVolume, DEFAULTS.sfxVolume),
       touchControls: touch === 'on' || touch === 'off' || touch === 'auto' ? touch : DEFAULTS.touchControls,
+      battleTutorialDone: data.battleTutorialDone === true,
     };
   } catch {
     return { ...DEFAULTS };
@@ -38,9 +41,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const musicVolume = ref(initial.musicVolume);
   const sfxVolume = ref(initial.sfxVolume);
   const touchControls = ref<TouchControlsMode>(initial.touchControls);
+  const battleTutorialDone = ref(initial.battleTutorialDone);
 
   watch(
-    [musicVolume, sfxVolume, touchControls],
+    [musicVolume, sfxVolume, touchControls, battleTutorialDone],
     () => {
       audio.setMusicVolume(musicVolume.value);
       audio.setSfxVolume(sfxVolume.value);
@@ -49,6 +53,7 @@ export const useSettingsStore = defineStore('settings', () => {
           musicVolume: musicVolume.value,
           sfxVolume: sfxVolume.value,
           touchControls: touchControls.value,
+          battleTutorialDone: battleTutorialDone.value,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       } catch {
@@ -58,5 +63,5 @@ export const useSettingsStore = defineStore('settings', () => {
     { immediate: true },
   );
 
-  return { musicVolume, sfxVolume, touchControls };
+  return { musicVolume, sfxVolume, touchControls, battleTutorialDone };
 });

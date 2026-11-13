@@ -1,60 +1,77 @@
 <script setup lang="ts">
 import type { InputHub } from '@/input/inputHub';
-import { onBeforeUnmount, reactive } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps<{ input: InputHub }>();
 
-type Direction = 'up' | 'down' | 'left' | 'right';
+/** Радиус хода ручки в пикселях и «мёртвая зона» в долях радиуса. */
+const RADIUS = 44;
+const DEAD_ZONE = 0.18;
 
-const held = reactive<Record<Direction, boolean>>({ up: false, down: false, left: false, right: false });
+const knob = ref({ x: 0, y: 0 });
+const active = ref(false);
+let origin = { x: 0, y: 0 };
 
-const sync = (): void => {
-  props.input.setVirtualMove(Number(held.right) - Number(held.left), Number(held.down) - Number(held.up));
+const move = (event: PointerEvent): void => {
+  let dx = (event.clientX - origin.x) / RADIUS;
+  let dy = (event.clientY - origin.y) / RADIUS;
+  const length = Math.hypot(dx, dy);
+  if (length > 1) {
+    dx /= length;
+    dy /= length;
+  }
+  knob.value = { x: dx * RADIUS, y: dy * RADIUS };
+  // Внутри мёртвой зоны персонаж стоит; дальше скорость растёт вместе с отклонением.
+  if (length < DEAD_ZONE) props.input.setVirtualMove(0, 0);
+  else props.input.setVirtualMove(dx, dy);
 };
 
-const press = (direction: Direction, event: PointerEvent): void => {
-  // Захват указателя: кнопка «отпустится», даже если палец съехал за её пределы.
-  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  held[direction] = true;
-  sync();
+const start = (event: PointerEvent): void => {
+  const target = event.currentTarget as HTMLElement;
+  // Захват указателя: стик продолжает слушаться, даже если палец ушёл за его пределы.
+  // Захват может не удаться (указатель уже отпущен) — джойстик работает и без него.
+  try {
+    target.setPointerCapture(event.pointerId);
+  } catch {
+    // Продолжаем без захвата.
+  }
+  const rect = target.getBoundingClientRect();
+  origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  active.value = true;
+  move(event);
 };
 
-const release = (direction: Direction): void => {
-  held[direction] = false;
-  sync();
+const drag = (event: PointerEvent): void => {
+  if (active.value) move(event);
 };
 
-const directions: { id: Direction; label: string; glyph: string }[] = [
-  { id: 'up', label: 'Вверх', glyph: '▲' },
-  { id: 'left', label: 'Влево', glyph: '◀' },
-  { id: 'right', label: 'Вправо', glyph: '▶' },
-  { id: 'down', label: 'Вниз', glyph: '▼' },
-];
+const end = (): void => {
+  active.value = false;
+  knob.value = { x: 0, y: 0 };
+  props.input.setVirtualMove(0, 0);
+};
 
 onBeforeUnmount(() => props.input.setVirtualMove(0, 0));
 </script>
 
 <template>
   <div class="touch">
-    <div class="touch__pad">
-      <button
-        v-for="direction in directions"
-        :key="direction.id"
-        type="button"
-        class="touch__button"
-        :class="[`touch__button--${direction.id}`, { 'touch__button--held': held[direction.id] }]"
-        :aria-label="direction.label"
-        @pointerdown.prevent="press(direction.id, $event)"
-        @pointerup="release(direction.id)"
-        @pointercancel="release(direction.id)"
-        @contextmenu.prevent
-      >
-        {{ direction.glyph }}
-      </button>
+    <div
+      class="touch__stick"
+      :class="{ 'touch__stick--active': active }"
+      role="application"
+      aria-label="Джойстик движения"
+      @pointerdown.prevent="start"
+      @pointermove="drag"
+      @pointerup="end"
+      @pointercancel="end"
+      @contextmenu.prevent
+    >
+      <span class="touch__knob" :style="{ transform: `translate(${knob.x}px, ${knob.y}px)` }" />
     </div>
     <button
       type="button"
-      class="touch__button touch__action"
+      class="touch__action"
       aria-label="Действие"
       @pointerdown.prevent="input.triggerAction()"
       @contextmenu.prevent
@@ -78,53 +95,48 @@ onBeforeUnmount(() => props.input.setVirtualMove(0, 0));
   touch-action: none;
 }
 
-.touch__pad {
-  display: grid;
-  grid-template: repeat(3, 48px) / repeat(3, 48px);
-}
-
-.touch__button {
+.touch__stick {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  font-size: 14px;
-  color: var(--text);
+  width: 136px;
+  height: 136px;
   pointer-events: auto;
   touch-action: none;
-  background: rgb(59 53 88 / 80%);
+  background: rgb(42 37 64 / 55%);
   border: var(--px) solid var(--ink);
   box-shadow: inset 0 0 0 2px var(--edge);
 }
 
-.touch__button--held,
-.touch__button:active {
-  color: var(--ink);
+.touch__knob {
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+  background: rgb(93 85 132 / 90%);
+  border: var(--px) solid var(--ink);
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+.touch__stick--active .touch__knob {
   background: var(--gold);
 }
 
-.touch__button--up {
-  grid-area: 1 / 2;
-}
-
-.touch__button--left {
-  grid-area: 2 / 1;
-}
-
-.touch__button--right {
-  grid-area: 2 / 3;
-}
-
-.touch__button--down {
-  grid-area: 3 / 2;
-}
-
 .touch__action {
+  display: grid;
+  place-items: center;
   width: 72px;
   height: 72px;
+  padding: 0;
+  font: inherit;
   font-size: 20px;
   color: var(--ink);
+  pointer-events: auto;
+  touch-action: none;
   background: rgb(242 201 76 / 90%);
+  border: var(--px) solid var(--ink);
+  box-shadow: inset 0 0 0 2px var(--edge);
+}
+
+.touch__action:active {
+  background: var(--text);
 }
 </style>

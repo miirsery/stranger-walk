@@ -22,6 +22,6 @@
       "@content/*": ["./src/content/*"]
     }
   },
-  "include": ["vite.config.ts", "src/**/*.test.ts"],
+  "include": ["vite.config.ts", "src/core/**/*.test.ts", "src/content/**/*.test.ts"],
   "references": [{ "path": "./tsconfig.core.json" }]
 }
