@@ -134,7 +134,10 @@ export type CardRarity = 'common' | 'rare' | 'epic' | 'legendary';
 /** guard — враг обязан атаковать это существо первым; charge — атакует в ход розыгрыша. */
 export type CardKeyword = 'guard' | 'charge';
 
-/** Эффекты без выбора цели — срабатывают при розыгрыше карты. */
+/**
+ * Эффекты карт. Большинство срабатывает без выбора цели; `damageTarget` и `buffTarget`
+ * требуют цель и потому допустимы только у заклинаний (см. `effectTargeting`).
+ */
 export type CardEffect =
   | { type: 'damageEnemyHero'; amount: number }
   | { type: 'healHero'; amount: number }
@@ -142,7 +145,20 @@ export type CardEffect =
   /** Урон всем существам противника. */
   | { type: 'damageAllEnemies'; amount: number }
   /** Усиление всех своих существ, уже стоящих на столе. */
-  | { type: 'buffAllies'; attack: number; health: number };
+  | { type: 'buffAllies'; attack: number; health: number }
+  /** Урон выбранной цели: существу врага или его герою. Защитники заклинанию не мешают. */
+  | { type: 'damageTarget'; amount: number }
+  /** Усиление выбранного своего существа. */
+  | { type: 'buffTarget'; attack: number; health: number };
+
+/** Кого нужно указать при розыгрыше: никого, врага (существо или героя) или своё существо. */
+export type EffectTargeting = 'none' | 'enemy' | 'ally';
+
+export const effectTargeting = (effect: CardEffect): EffectTargeting => {
+  if (effect.type === 'damageTarget') return 'enemy';
+  if (effect.type === 'buffTarget') return 'ally';
+  return 'none';
+};
 
 interface CardBase {
   id: CardId;
@@ -159,8 +175,10 @@ export interface UnitCardDef extends CardBase {
   attack: number;
   health: number;
   keywords: CardKeyword[];
-  /** Необязательный эффект в момент выхода на стол. */
+  /** Необязательный эффект в момент выхода на стол (без выбора цели). */
   onPlay?: CardEffect;
+  /** Необязательный эффект в момент гибели существа (без выбора цели). */
+  onDeath?: CardEffect;
 }
 
 /** Заклинание: срабатывает один раз и уходит. */

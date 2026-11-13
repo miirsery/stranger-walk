@@ -3,7 +3,7 @@ import type { AttackTarget, BattleState, CardBattle, Side, UnitState } from './c
 import { opponentOf } from './cardBattle';
 
 export type AiAction =
-  | { type: 'play'; handIndex: number }
+  | { type: 'play'; handIndex: number; target?: AttackTarget }
   | { type: 'attack'; attackerUid: number; target: AttackTarget }
   | { type: 'endTurn' };
 
@@ -21,8 +21,33 @@ const isWasted = (effect: CardEffect, state: BattleState, side: Side): boolean =
     case 'draw':
       return own.deck.length === 0;
     case 'damageEnemyHero':
+    case 'damageTarget':
       return false;
+    case 'buffTarget':
+      return own.board.length === 0;
   }
+};
+
+/** Цель для заклинания: добить героя, убить самое опасное существо или усилить своё сильнейшее. */
+const chooseSpellTarget = (battle: CardBattle, state: BattleState, side: Side, handIndex: number): AttackTarget | undefined => {
+  const cardId = state.sides[side].hand[handIndex];
+  if (cardId === undefined) return undefined;
+  const card = battle.card(cardId);
+  if (card.type !== 'spell') return undefined;
+  const byAttack = (units: UnitState[]): UnitState[] => [...units].sort((a, b) => b.attack - a.attack);
+
+  if (card.effect.type === 'buffTarget') {
+    const best = byAttack(state.sides[side].board)[0];
+    return best ? { type: 'unit', uid: best.uid } : undefined;
+  }
+  if (card.effect.type === 'damageTarget') {
+    const { amount } = card.effect;
+    const foe = state.sides[opponentOf(side)];
+    if (foe.hero.health <= amount) return { type: 'hero' };
+    const killable = byAttack(foe.board.filter((unit) => unit.health <= amount))[0];
+    return killable ? { type: 'unit', uid: killable.uid } : { type: 'hero' };
+  }
+  return undefined;
 };
 
 /**
@@ -47,7 +72,10 @@ export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiActi
       bestCost = cost;
     }
   });
-  if (bestIndex >= 0) return { type: 'play', handIndex: bestIndex };
+  if (bestIndex >= 0) {
+    const target = chooseSpellTarget(battle, state, side, bestIndex);
+    return target ? { type: 'play', handIndex: bestIndex, target } : { type: 'play', handIndex: bestIndex };
+  }
 
   const attacker = own.board.find((unit) => unit.canAttack && unit.attack > 0);
   if (attacker) {
@@ -79,7 +107,7 @@ export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiActi
 export const performAiStep = (battle: CardBattle, side: Side = 'enemy'): AiAction | null => {
   const action = chooseAiAction(battle, side);
   if (!action) return null;
-  if (action.type === 'play') battle.playCard(side, action.handIndex);
+  if (action.type === 'play') battle.playCard(side, action.handIndex, action.target);
   else if (action.type === 'attack') battle.attack(side, action.attackerUid, action.target);
   else battle.endTurn(side);
   return action;

@@ -19,7 +19,7 @@ export const quests: Record<string, QuestDef> = {
       { id: 'talk_engineer', text: 'Найди механика в кормовом отсеке', type: 'talkTo', npcId: 'engineer' },
       { id: 'win_cargo', text: 'Помоги с описью груза', type: 'winMinigame', minigameId: 'cargo_sort' },
     ],
-    rewardCards: ['torpedo', 'diver', 'kraken'],
+    rewardCards: ['torpedo', 'diver', 'kraken', 'mine'],
   },
   final_game: {
     id: 'final_game',
@@ -29,7 +29,7 @@ export const quests: Record<string, QuestDef> = {
       { id: 'enter_castle', text: 'Войди в замок Хранителя', type: 'enterLevel', levelId: 'castle' },
       { id: 'defeat_keeper', text: 'Победи Хранителя в карточном бою', type: 'defeatBoss', bossId: 'keeper' },
     ],
-    rewardCards: ['shadow'],
+    rewardCards: ['shadow', 'blessing'],
   },
   beyond: {
     id: 'beyond',
@@ -39,6 +39,6 @@ export const quests: Record<string, QuestDef> = {
       { id: 'enter_station', text: 'Пройди через звёздные врата в замке', type: 'enterLevel', levelId: 'station' },
       { id: 'defeat_captain', text: 'Победи Капитана Пустоты', type: 'defeatBoss', bossId: 'void_captain' },
     ],
-    rewardCards: ['titan'],
+    rewardCards: ['titan', 'drone', 'shield'],
   },
 };

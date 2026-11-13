@@ -1,14 +1,17 @@
 import type { CardEffect, Condition, Effect, GameContent, LevelDef, Point, SettingDef } from './types';
+import { effectTargeting } from './types';
 
 const effectIsValid = (effect: CardEffect): boolean => {
   switch (effect.type) {
     case 'damageEnemyHero':
     case 'healHero':
     case 'damageAllEnemies':
+    case 'damageTarget':
       return effect.amount > 0;
     case 'draw':
       return effect.count > 0;
     case 'buffAllies':
+    case 'buffTarget':
       return effect.attack >= 0 && effect.health >= 0 && effect.attack + effect.health > 0;
   }
 };
@@ -149,8 +152,14 @@ export const validateContent = (content: GameContent): string[] => {
     if (card.type === 'unit' && (card.attack < 0 || card.health <= 0)) {
       errors.push(`Карта ${card.id}: некорректные характеристики`);
     }
-    const effect = card.type === 'unit' ? card.onPlay : card.effect;
-    if (effect && !effectIsValid(effect)) errors.push(`Карта ${card.id}: некорректный эффект`);
+    const effects = card.type === 'unit' ? [card.onPlay, card.onDeath] : [card.effect];
+    for (const effect of effects) {
+      if (!effect) continue;
+      if (!effectIsValid(effect)) errors.push(`Карта ${card.id}: некорректный эффект`);
+      if (card.type === 'unit' && effectTargeting(effect) !== 'none') {
+        errors.push(`Карта ${card.id}: эффект существа не может требовать выбора цели`);
+      }
+    }
   }
 
   for (const boss of Object.values(content.bosses)) {

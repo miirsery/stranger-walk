@@ -24,6 +24,6 @@ export const minigames: Record<string, MinigameDef> = {
     maxMistakes: 8,
     revealMs: 900,
     music: 'battle',
-    rewardCards: ['depth_charge'],
+    rewardCards: ['depth_charge', 'harpoon'],
   },
 };

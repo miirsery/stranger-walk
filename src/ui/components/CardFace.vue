@@ -30,7 +30,7 @@ const buffed = computed(() => unit.value !== null && (health.value > unit.value.
     <span v-if="unit && unit.keywords.length" class="card__keywords">
       {{ unit.keywords.map((keyword) => KEYWORD_LABELS[keyword]).join(' · ') }}
     </span>
-    <span v-else-if="unit?.onPlay" class="card__keywords">Эффект</span>
+    <span v-else-if="unit?.onPlay || unit?.onDeath" class="card__keywords">Эффект</span>
     <span v-if="unit" class="card__stats" :class="{ 'card__stats--buffed': buffed }">
       <span class="card__attack" aria-label="Атака">{{ attack }}</span>
       <!-- key по здоровью перезапускает анимацию удара при каждом изменении -->

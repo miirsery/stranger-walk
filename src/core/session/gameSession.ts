@@ -163,8 +163,8 @@ export class GameSession {
 
   // ---------- Карточный бой ----------
 
-  battlePlayCard(handIndex: number): ActionResult {
-    return this.battleAction((battle) => battle.playCard('player', handIndex));
+  battlePlayCard(handIndex: number, target?: AttackTarget): ActionResult {
+    return this.battleAction((battle) => battle.playCard('player', handIndex, target));
   }
 
   battleAttack(attackerUid: number, target: AttackTarget): ActionResult {

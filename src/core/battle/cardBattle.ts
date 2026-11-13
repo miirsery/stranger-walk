@@ -1,4 +1,5 @@
-import type { CardDef, CardEffect, CardId, CardKeyword } from '../content/types';
+import type { CardDef, CardEffect, CardId, CardKeyword, EffectTargeting } from '../content/types';
+import { effectTargeting } from '../content/types';
 import type { Rng } from '../util/rng';
 import { shuffle } from '../util/rng';
 
@@ -35,12 +36,21 @@ export interface SideState {
   fatigue: number;
 }
 
+/** Последняя атака — чтобы интерфейс мог её анимировать. `seq` растёт с каждой атакой. */
+export interface LastAttack {
+  seq: number;
+  side: Side;
+  attackerUid: number;
+  target: AttackTarget;
+}
+
 export interface BattleState {
   turn: number;
   active: Side;
   winner: Side | null;
   sides: Record<Side, SideState>;
   log: string[];
+  lastAttack: LastAttack | null;
 }
 
 export type AttackTarget = { type: 'hero' } | { type: 'unit'; uid: number };
@@ -75,6 +85,9 @@ export interface BattleConfig {
   rules?: Partial<BattleRules>;
 }
 
+const sameTarget = (a: AttackTarget, b: AttackTarget): boolean =>
+  a.type === 'hero' ? b.type === 'hero' : b.type === 'unit' && a.uid === b.uid;
+
 const ok: ActionResult = { ok: true };
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
 
@@ -107,6 +120,7 @@ export class CardBattle {
       winner: null,
       sides: { player: side(config.player), enemy: side(config.enemy) },
       log: [],
+      lastAttack: null,
     };
     for (let i = 0; i < this.rules.startingHand; i++) {
       this.draw('player');
@@ -136,6 +150,7 @@ export class CardBattle {
       ...this.state,
       sides: { player: copySide(this.state.sides.player), enemy: copySide(this.state.sides.enemy) },
       log: [...this.state.log],
+      lastAttack: this.state.lastAttack ? { ...this.state.lastAttack } : null,
     };
   }
 
@@ -143,7 +158,33 @@ export class CardBattle {
     return this.resolveCard(cardId);
   }
 
-  canPlay(side: Side, handIndex: number): ActionResult {
+  /** Нужно ли указывать цель при розыгрыше карты и какую. */
+  targetingOf(cardId: CardId): EffectTargeting {
+    const card = this.resolveCard(cardId);
+    return card.type === 'spell' ? effectTargeting(card.effect) : 'none';
+  }
+
+  /** Допустимые цели заклинания из руки; пустой список — цель не нужна или её нет. */
+  validPlayTargets(side: Side, handIndex: number): AttackTarget[] {
+    const cardId = this.state.sides[side].hand[handIndex];
+    if (cardId === undefined) return [];
+    const units = (owner: Side): AttackTarget[] =>
+      this.state.sides[owner].board.map((unit) => ({ type: 'unit', uid: unit.uid }));
+    switch (this.targetingOf(cardId)) {
+      case 'enemy':
+        return [{ type: 'hero' }, ...units(opponentOf(side))];
+      case 'ally':
+        return units(side);
+      case 'none':
+        return [];
+    }
+  }
+
+  /**
+   * Можно ли сыграть карту. Для заклинаний с целью: без `target` проверяется только,
+   * что цели вообще есть; с `target` — что выбранная цель допустима.
+   */
+  canPlay(side: Side, handIndex: number, target?: AttackTarget): ActionResult {
     const guard = this.guardTurn(side);
     if (!guard.ok) return guard;
     const own = this.state.sides[side];
@@ -152,19 +193,26 @@ export class CardBattle {
     const card = this.resolveCard(cardId);
     if (card.cost > own.mana) return fail('Не хватает маны');
     if (card.type === 'unit' && own.board.length >= this.rules.maxBoard) return fail('На столе нет места');
+    if (this.targetingOf(cardId) !== 'none') {
+      const targets = this.validPlayTargets(side, handIndex);
+      if (targets.length === 0) return fail('Нет подходящей цели');
+      if (target && !targets.some((candidate) => sameTarget(candidate, target))) return fail('Нет такой цели');
+    }
     return ok;
   }
 
-  playCard(side: Side, handIndex: number): ActionResult {
-    const check = this.canPlay(side, handIndex);
+  playCard(side: Side, handIndex: number, target?: AttackTarget): ActionResult {
+    const check = this.canPlay(side, handIndex, target);
     if (!check.ok) return check;
+    const needsTarget = this.targetingOf(this.state.sides[side].hand[handIndex] as CardId) !== 'none';
+    if (needsTarget && !target) return fail('Нужно выбрать цель');
     const own = this.state.sides[side];
     const [cardId] = own.hand.splice(handIndex, 1);
     const card = this.resolveCard(cardId as CardId);
     own.mana -= card.cost;
     if (card.type === 'spell') {
       this.log(`${own.hero.name}: заклинание «${card.name}»`);
-      this.applyEffect(side, card.effect);
+      this.applyEffect(side, card.effect, target);
     } else {
       this.log(`${own.hero.name}: «${card.name}» выходит на стол`);
       // Эффект выхода срабатывает до появления существа: «усилить союзников» его самого не касается.
@@ -202,17 +250,14 @@ export class CardBattle {
     if (!attacker.canAttack) return fail('Это существо сейчас не может атаковать');
     if (attacker.attack <= 0) return fail('У существа нет атаки');
 
-    const allowed = this.validTargets(side).some(
-      (candidate) =>
-        candidate.type === target.type &&
-        (candidate.type === 'hero' || (target.type === 'unit' && candidate.uid === target.uid)),
-    );
+    const allowed = this.validTargets(side).some((candidate) => sameTarget(candidate, target));
     if (!allowed) {
       const exists = target.type === 'hero' || foe.board.some((unit) => unit.uid === target.uid);
       return fail(exists ? 'Сначала нужно атаковать защитника' : 'Нет такой цели');
     }
 
     attacker.canAttack = false;
+    this.state.lastAttack = { seq: (this.state.lastAttack?.seq ?? 0) + 1, side, attackerUid, target };
     if (target.type === 'hero') {
       foe.hero.health -= attacker.attack;
       this.log(`«${attacker.name}» бьёт героя ${foe.hero.name} на ${attacker.attack}`);
@@ -221,8 +266,8 @@ export class CardBattle {
       defender.health -= attacker.attack;
       attacker.health -= defender.attack;
       this.log(`«${attacker.name}» атакует «${defender.name}»`);
-      this.buryDead(own);
-      this.buryDead(foe);
+      this.buryDead(side);
+      this.buryDead(opponentOf(side));
     }
     this.checkWinner();
     return ok;
@@ -235,7 +280,7 @@ export class CardBattle {
     return ok;
   }
 
-  private applyEffect(side: Side, effect: CardEffect): void {
+  private applyEffect(side: Side, effect: CardEffect, target?: AttackTarget): void {
     const own = this.state.sides[side];
     const foe = this.state.sides[opponentOf(side)];
     switch (effect.type) {
@@ -254,7 +299,7 @@ export class CardBattle {
       case 'damageAllEnemies':
         for (const unit of foe.board) unit.health -= effect.amount;
         this.log(`Все существа героя ${foe.hero.name} получают ${effect.amount} урона`);
-        this.buryDead(foe);
+        this.buryDead(opponentOf(side));
         break;
       case 'buffAllies':
         for (const unit of own.board) {
@@ -264,6 +309,27 @@ export class CardBattle {
         }
         this.log(`Существа героя ${own.hero.name} получают +${effect.attack}/+${effect.health}`);
         break;
+      case 'damageTarget': {
+        const unit = target?.type === 'unit' ? foe.board.find((candidate) => candidate.uid === target.uid) : undefined;
+        if (unit) {
+          unit.health -= effect.amount;
+          this.log(`«${unit.name}» получает ${effect.amount} урона`);
+          this.buryDead(opponentOf(side));
+        } else {
+          foe.hero.health -= effect.amount;
+          this.log(`Герой ${foe.hero.name} получает ${effect.amount} урона`);
+        }
+        break;
+      }
+      case 'buffTarget': {
+        const unit = target?.type === 'unit' ? own.board.find((candidate) => candidate.uid === target.uid) : undefined;
+        if (!unit) break;
+        unit.attack += effect.attack;
+        unit.health += effect.health;
+        unit.maxHealth += effect.health;
+        this.log(`«${unit.name}» получает +${effect.attack}/+${effect.health}`);
+        break;
+      }
     }
   }
 
@@ -297,11 +363,18 @@ export class CardBattle {
     if (own.hand.length < this.rules.maxHand) own.hand.push(cardId);
   }
 
-  private buryDead(side: SideState): void {
-    for (const unit of side.board) {
-      if (unit.health <= 0) this.log(`«${unit.name}» погибает`);
+  /** Убирает погибших существ стороны и запускает их эффекты гибели. */
+  private buryDead(side: Side): void {
+    const own = this.state.sides[side];
+    const dead = own.board.filter((unit) => unit.health <= 0);
+    if (dead.length === 0) return;
+    own.board = own.board.filter((unit) => unit.health > 0);
+    for (const unit of dead) {
+      this.log(`«${unit.name}» погибает`);
+      const card = this.resolveCard(unit.cardId);
+      // Существо уже снято со стола, поэтому цепочка эффектов гибели конечна.
+      if (card.type === 'unit' && card.onDeath) this.applyEffect(side, card.onDeath);
     }
-    side.board = side.board.filter((unit) => unit.health > 0);
   }
 
   private checkWinner(): void {

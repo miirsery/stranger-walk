@@ -12,9 +12,11 @@ const unit = (
   health: number,
   keywords: CardKeyword[] = [],
   onPlay?: CardEffect,
+  onDeath?: CardEffect,
 ): CardDef => ({
   id, type: 'unit', name: id, cost, attack, health, keywords, rarity: 'common', setting: 'test', text: '',
   ...(onPlay ? { onPlay } : {}),
+  ...(onDeath ? { onDeath } : {}),
 });
 
 const spell = (id: string, cost: number, effect: CardEffect): CardDef => ({
@@ -28,6 +30,9 @@ const defs: Record<string, CardDef> = {
   quake: spell('quake', 1, { type: 'damageAllEnemies', amount: 2 }),
   banner: spell('banner', 1, { type: 'buffAllies', attack: 1, health: 2 }),
   sniper: unit('sniper', 1, 1, 1, [], { type: 'damageEnemyHero', amount: 2 }),
+  dart: spell('dart', 1, { type: 'damageTarget', amount: 3 }),
+  bless: spell('bless', 1, { type: 'buffTarget', attack: 2, health: 2 }),
+  mine: unit('mine', 1, 0, 1, ['guard'], undefined, { type: 'damageAllEnemies', amount: 1 }),
   grunt: unit('grunt', 1, 2, 2),
   wall: unit('wall', 1, 0, 5, ['guard']),
   rusher: unit('rusher', 1, 3, 1, ['charge']),
@@ -240,6 +245,84 @@ describe('эффекты карт', () => {
     const state = battle.snapshot();
     expect(state.sides.enemy.hero.health).toBe(8);
     expect(state.sides.player.board).toHaveLength(1);
+  });
+});
+
+describe('заклинания с целью и эффекты гибели', () => {
+  /** Бой, где у врага на столе одно существо, а ход снова у игрока. */
+  const withEnemyUnit = (playerCard: string, enemyCard: string): { battle: CardBattle; enemyUid: number } => {
+    const battle = createBattle(many(playerCard, 10), many(enemyCard, 10));
+    battle.endTurn('player');
+    battle.playCard('enemy', 0);
+    battle.endTurn('enemy');
+    return { battle, enemyUid: battle.snapshot().sides.enemy.board[0]?.uid ?? -1 };
+  };
+
+  it('урон по цели требует выбрать цель и не обращает внимания на защитников', () => {
+    const { battle, enemyUid } = withEnemyUnit('dart', 'wall');
+    expect(battle.targetingOf('dart')).toBe('enemy');
+    expect(battle.playCard('player', 0)).toEqual({ ok: false, reason: 'Нужно выбрать цель' });
+    expect(battle.validPlayTargets('player', 0)).toEqual([{ type: 'hero' }, { type: 'unit', uid: enemyUid }]);
+    expect(battle.playCard('player', 0, { type: 'unit', uid: 999 })).toEqual({ ok: false, reason: 'Нет такой цели' });
+    expect(battle.snapshot().sides.player.hand).toHaveLength(5);
+
+    expect(battle.playCard('player', 0, { type: 'hero' })).toEqual({ ok: true });
+    expect(battle.snapshot().sides.enemy.hero.health).toBe(7);
+    expect(battle.playCard('player', 0, { type: 'unit', uid: enemyUid })).toEqual({ ok: true });
+    expect(battle.snapshot().sides.enemy.board[0]?.health).toBe(2);
+  });
+
+  it('урон по цели убивает существо', () => {
+    const { battle, enemyUid } = withEnemyUnit('dart', 'grunt');
+    battle.playCard('player', 0, { type: 'unit', uid: enemyUid });
+    expect(battle.snapshot().sides.enemy.board).toHaveLength(0);
+  });
+
+  it('усиление цели действует на своё существо и недоступно без существ', () => {
+    const battle = createBattle(['grunt', 'bless', 'grunt', 'bless', 'grunt', 'bless', 'grunt', 'bless'], many('wall', 10));
+    const blessIndex = (): number => battle.snapshot().sides.player.hand.indexOf('bless');
+    expect(battle.targetingOf('bless')).toBe('ally');
+    expect(battle.canPlay('player', blessIndex())).toEqual({ ok: false, reason: 'Нет подходящей цели' });
+    battle.playCard('player', battle.snapshot().sides.player.hand.indexOf('grunt'));
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    const uid = battle.snapshot().sides.player.board[0]?.uid ?? -1;
+    expect(battle.playCard('player', blessIndex(), { type: 'hero' }).ok).toBe(false);
+    expect(battle.playCard('player', blessIndex(), { type: 'unit', uid })).toEqual({ ok: true });
+    expect(battle.snapshot().sides.player.board[0]).toMatchObject({ attack: 4, health: 4, maxHealth: 4 });
+  });
+
+  it('эффект гибели срабатывает, когда существо умирает', () => {
+    const { battle, enemyUid } = withEnemyUnit('grunt', 'mine');
+    battle.playCard('player', 0);
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    const attacker = battle.snapshot().sides.player.board[0]?.uid ?? -1;
+    battle.attack('player', attacker, { type: 'unit', uid: enemyUid });
+    const state = battle.snapshot();
+    expect(state.sides.enemy.board).toHaveLength(0);
+    // Мина (0 атаки) не ранила «grunt» в бою, но её взрыв снял 1 здоровья.
+    expect(state.sides.player.board[0]?.health).toBe(1);
+  });
+
+  it('запоминает последнюю атаку для анимации', () => {
+    const battle = createBattle(many('rusher', 10), many('grunt', 10));
+    expect(battle.snapshot().lastAttack).toBeNull();
+    battle.playCard('player', 0);
+    const uid = battle.snapshot().sides.player.board[0]?.uid ?? -1;
+    battle.attack('player', uid, { type: 'hero' });
+    expect(battle.snapshot().lastAttack).toEqual({ seq: 1, side: 'player', attackerUid: uid, target: { type: 'hero' } });
+  });
+
+  it('ИИ выбирает цель: убивает существо, если может, иначе бьёт героя', () => {
+    const kill = withEnemyUnit('dart', 'grunt');
+    expect(chooseAiAction(kill.battle, 'player')).toEqual({
+      type: 'play',
+      handIndex: 0,
+      target: { type: 'unit', uid: kill.enemyUid },
+    });
+    const tough = withEnemyUnit('dart', 'wall');
+    expect(chooseAiAction(tough.battle, 'player')).toEqual({ type: 'play', handIndex: 0, target: { type: 'hero' } });
   });
 });
 

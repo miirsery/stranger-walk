@@ -9,6 +9,8 @@ import CardFace from './CardFace.vue';
 const props = defineProps<{ session: GameSession; state: BattleState }>();
 
 const selectedUid = ref<number | null>(null);
+/** Индекс заклинания в руке, для которого сейчас выбирается цель. */
+const aimingIndex = ref<number | null>(null);
 const message = ref('');
 
 const player = computed(() => props.state.sides.player);
@@ -64,16 +66,48 @@ watch(
 const card = (cardId: string): CardDef => props.session.content.card(cardId);
 const tint = (cardId: string): number => props.session.content.setting(card(cardId).setting).backgroundColor;
 
-/** Цели, доступные выбранному существу (по правилу защитников). */
+/** Цели выбранного существа (по правилу защитников) или заклинания, для которого выбирается цель. */
 const targets = computed<AttackTarget[]>(() => {
   const mode = props.session.mode;
-  if (selectedUid.value === null || mode.kind !== 'battle' || !myTurn.value) return [];
   // Обращение к props.state делает вычисление зависимым от снимка боя.
-  return props.state.turn > 0 ? mode.battle.validTargets('player') : [];
+  if (mode.kind !== 'battle' || !myTurn.value || props.state.turn === 0) return [];
+  if (aimingIndex.value !== null) return mode.battle.validPlayTargets('player', aimingIndex.value);
+  return selectedUid.value === null ? [] : mode.battle.validTargets('player');
 });
-const canTargetHero = computed(() => targets.value.some((target) => target.type === 'hero'));
-const canTargetUnit = (uid: number): boolean =>
-  targets.value.some((target) => target.type === 'unit' && target.uid === uid);
+/** Заклинание усиления целится в свои существа, всё остальное — во врага. */
+const aimingAtAllies = computed(() => {
+  const mode = props.session.mode;
+  const cardId = aimingIndex.value === null ? undefined : player.value.hand[aimingIndex.value];
+  return mode.kind === 'battle' && cardId !== undefined && mode.battle.targetingOf(cardId) === 'ally';
+});
+const hasTarget = (uid: number): boolean => targets.value.some((target) => target.type === 'unit' && target.uid === uid);
+const canTargetHero = computed(() => !aimingAtAllies.value && targets.value.some((target) => target.type === 'hero'));
+const canTargetUnit = (uid: number): boolean => !aimingAtAllies.value && hasTarget(uid);
+const canTargetAlly = (uid: number): boolean => aimingAtAllies.value && hasTarget(uid);
+
+// ---------- Анимация атаки ----------
+const LUNGE_MS = 320;
+const lungeUid = ref<number | null>(null);
+const hitUid = ref<number | null>(null);
+const hitHero = ref<'player' | 'enemy' | null>(null);
+let lungeTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.state.lastAttack?.seq,
+  () => {
+    const attack = props.state.lastAttack;
+    if (!attack) return;
+    lungeUid.value = attack.attackerUid;
+    hitUid.value = attack.target.type === 'unit' ? attack.target.uid : null;
+    hitHero.value = attack.target.type === 'hero' ? (attack.side === 'player' ? 'enemy' : 'player') : null;
+    if (lungeTimer !== null) clearTimeout(lungeTimer);
+    lungeTimer = setTimeout(() => {
+      lungeUid.value = null;
+      hitUid.value = null;
+      hitHero.value = null;
+    }, LUNGE_MS);
+  },
+);
 
 const report = (result: { ok: true } | { ok: false; reason: string }): void => {
   message.value = result.ok ? '' : result.reason;
@@ -81,11 +115,41 @@ const report = (result: { ok: true } | { ok: false; reason: string }): void => {
 
 const playCard = (index: number): void => {
   selectedUid.value = null;
-  report(props.session.battlePlayCard(index));
+  const mode = props.session.mode;
+  const cardId = player.value.hand[index];
+  const needsTarget = mode.kind === 'battle' && cardId !== undefined && mode.battle.targetingOf(cardId) !== 'none';
+  if (!needsTarget) {
+    aimingIndex.value = null;
+    report(props.session.battlePlayCard(index));
+    return;
+  }
+  // Повторное нажатие на ту же карту отменяет прицеливание.
+  if (aimingIndex.value === index) {
+    aimingIndex.value = null;
+    message.value = '';
+    return;
+  }
+  const check = mode.battle.canPlay('player', index);
+  if (!check.ok) {
+    report(check);
+    return;
+  }
+  aimingIndex.value = index;
+  message.value = 'Выбери цель для заклинания';
+};
+
+const castAt = (target: AttackTarget): void => {
+  if (aimingIndex.value === null) return;
+  report(props.session.battlePlayCard(aimingIndex.value, target));
+  aimingIndex.value = null;
 };
 
 const selectUnit = (unit: UnitState): void => {
   if (!myTurn.value) return;
+  if (aimingIndex.value !== null) {
+    if (canTargetAlly(unit.uid)) castAt({ type: 'unit', uid: unit.uid });
+    return;
+  }
   if (!unit.canAttack) {
     message.value = 'Это существо сейчас не может атаковать';
     return;
@@ -95,6 +159,10 @@ const selectUnit = (unit: UnitState): void => {
 };
 
 const attack = (target: AttackTarget): void => {
+  if (aimingIndex.value !== null) {
+    castAt(target);
+    return;
+  }
   if (selectedUid.value === null) {
     message.value = 'Сначала выбери своё существо';
     return;
@@ -109,17 +177,22 @@ const attack = (target: AttackTarget): void => {
 
 const endTurn = (): void => {
   selectedUid.value = null;
+  aimingIndex.value = null;
   const result = props.session.battleEndTurn();
   report(result);
   if (result.ok) runEnemyTurn();
 };
 
-onBeforeUnmount(stopEnemy);
+onBeforeUnmount(() => {
+  stopEnemy();
+  if (lungeTimer !== null) clearTimeout(lungeTimer);
+});
 
 watch(
   () => props.state.winner,
   () => {
     selectedUid.value = null;
+    aimingIndex.value = null;
   },
 );
 </script>
@@ -130,7 +203,7 @@ watch(
       <button
         type="button"
         class="battle__hero battle__hero--enemy"
-        :class="{ 'battle__hero--target': canTargetHero }"
+        :class="{ 'battle__hero--target': canTargetHero, 'battle__hero--hit': hitHero === 'enemy' }"
         :disabled="!canTargetHero"
         @click="attack({ type: 'hero' })"
       >
@@ -141,29 +214,36 @@ watch(
     </header>
 
     <div class="battle__board">
-      <ul class="battle__row" aria-label="Существа противника">
+      <TransitionGroup tag="ul" name="unit" class="battle__row" aria-label="Существа противника">
         <li v-for="unit in enemy.board" :key="unit.uid">
           <button
             type="button"
             class="battle__slot"
-            :class="{ 'battle__slot--target': canTargetUnit(unit.uid) }"
+            :class="{
+              'battle__slot--target': canTargetUnit(unit.uid),
+              'battle__slot--lunge-down': lungeUid === unit.uid,
+              'battle__slot--hit': hitUid === unit.uid,
+            }"
             :disabled="!canTargetUnit(unit.uid)"
             @click="attack({ type: 'unit', uid: unit.uid })"
           >
             <CardFace :card="card(unit.cardId)" :attack="unit.attack" :health="unit.health" :tint="tint(unit.cardId)" compact />
           </button>
         </li>
-        <li v-if="enemy.board.length === 0" class="battle__empty">стол противника пуст</li>
-      </ul>
+        <li v-if="enemy.board.length === 0" key="empty" class="battle__empty">стол противника пуст</li>
+      </TransitionGroup>
       <div class="battle__divider" aria-hidden="true" />
-      <ul class="battle__row" aria-label="Твои существа">
+      <TransitionGroup tag="ul" name="unit" class="battle__row" aria-label="Твои существа">
         <li v-for="unit in player.board" :key="unit.uid">
           <button
             type="button"
             class="battle__slot"
             :class="{
-              'battle__slot--ready': myTurn && unit.canAttack,
+              'battle__slot--ready': myTurn && unit.canAttack && aimingIndex === null,
               'battle__slot--selected': selectedUid === unit.uid,
+              'battle__slot--ally-target': canTargetAlly(unit.uid),
+              'battle__slot--lunge-up': lungeUid === unit.uid,
+              'battle__slot--hit': hitUid === unit.uid,
             }"
             :aria-pressed="selectedUid === unit.uid"
             @click="selectUnit(unit)"
@@ -171,8 +251,8 @@ watch(
             <CardFace :card="card(unit.cardId)" :attack="unit.attack" :health="unit.health" :tint="tint(unit.cardId)" compact />
           </button>
         </li>
-        <li v-if="player.board.length === 0" class="battle__empty">сыграй карту из руки</li>
-      </ul>
+        <li v-if="player.board.length === 0" key="empty" class="battle__empty">сыграй карту из руки</li>
+      </TransitionGroup>
     </div>
 
     <footer class="battle__side battle__side--player">
@@ -184,7 +264,7 @@ watch(
         </button>
       </aside>
       <div class="battle__status">
-        <div class="battle__hero">
+        <div class="battle__hero" :class="{ 'battle__hero--hit': hitHero === 'player' }">
           <span class="battle__hero-name">{{ player.hero.name }}</span>
           <span :key="player.hero.health" class="battle__hp">♥ {{ Math.max(0, player.hero.health) }}</span>
         </div>
@@ -208,7 +288,10 @@ watch(
           <button
             type="button"
             class="battle__slot"
-            :class="{ 'battle__slot--ready': myTurn && card(cardId).cost <= player.mana }"
+            :class="{
+              'battle__slot--ready': myTurn && card(cardId).cost <= player.mana,
+              'battle__slot--selected': aimingIndex === index,
+            }"
             :disabled="!myTurn"
             :title="card(cardId).text"
             @click="playCard(index)"
@@ -357,6 +440,65 @@ watch(
 
 .battle__slot--selected {
   filter: drop-shadow(0 4px 0 var(--gold));
+}
+
+.battle__slot--ally-target {
+  cursor: crosshair;
+  filter: drop-shadow(0 4px 0 var(--green));
+  animation: pulse 0.6s steps(2) infinite;
+}
+
+.battle__slot--lunge-up {
+  animation: lunge-up 0.3s steps(4);
+}
+
+.battle__slot--lunge-down {
+  animation: lunge-down 0.3s steps(4);
+}
+
+.battle__slot--hit,
+.battle__hero--hit {
+  animation: shake 0.3s steps(6);
+}
+
+/* Появление существа на столе и его гибель. */
+.unit-enter-active,
+.unit-leave-active {
+  transition:
+    opacity 0.25s steps(4),
+    transform 0.25s steps(4);
+}
+
+.unit-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.unit-leave-to {
+  opacity: 0;
+  transform: scale(0.6) rotate(8deg);
+}
+
+@keyframes lunge-up {
+  40% {
+    transform: translateY(-22px);
+  }
+}
+
+@keyframes lunge-down {
+  40% {
+    transform: translateY(22px);
+  }
+}
+
+@keyframes shake {
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
 }
 
 .battle__slot--target {
