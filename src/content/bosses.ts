@@ -21,11 +21,13 @@ export const bosses: Record<string, BossDef> = {
     name: 'Капитан Пустоты',
     title: 'Хозяин станции «Горизонт»',
     setting: 'space',
-    health: 25,
+    // Здоровье и быстрая колода подобраны симуляцией (см. balance.test.ts):
+    // прежний вариант с 25 здоровья проигрывал собранной колоде игрока в 87% боёв.
+    health: 35,
     music: 'battle',
     deck: [
-      'drone', 'drone', 'astronaut', 'astronaut', 'turret', 'turret',
-      'shield', 'shield', 'comet', 'comet', 'meteor', 'meteor', 'star_map', 'kraken', 'titan',
+      'drone', 'drone', 'archer', 'archer', 'astronaut', 'astronaut', 'torpedo', 'torpedo',
+      'turret', 'turret', 'comet', 'comet', 'meteor', 'meteor', 'shield', 'titan',
     ],
     rewardCards: ['comet', 'meteor', 'star_map'],
     winLines: ['Чистая победа. Карты твои — и звёздные карты тоже.', 'Продолжение следует…'],

@@ -59,7 +59,7 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
 <style scoped>
 .memory {
   position: absolute;
-  inset: 72px 12px;
+  inset: 72px 8px;
   display: grid;
   place-items: center;
   overflow-y: auto;
@@ -68,8 +68,8 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
 .memory__grid {
   display: grid;
   grid-template-columns: repeat(4, 76px);
-  gap: 14px;
-  padding: 10px;
+  gap: 10px 8px;
+  padding: 6px;
   margin: 0;
   list-style: none;
 }
@@ -77,6 +77,8 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
 @media (width >= 700px) {
   .memory__grid {
     grid-template-columns: repeat(6, 76px);
+    gap: 14px;
+    padding: 10px;
   }
 }
 

@@ -6,9 +6,12 @@ import { SCENE_KEYS, setRenderContext } from './context';
 import { MinigameScene } from './scenes/MinigameScene';
 import { WorldScene } from './scenes/WorldScene';
 
-/** Минимальное внутреннее разрешение: экран масштабируется от него в целое число раз. */
-const BASE_WIDTH = 320;
-const BASE_HEIGHT = 180;
+/**
+ * Минимальное внутреннее разрешение: экран масштабируется от него в целое число раз.
+ * В портретной ориентации стороны меняются местами — иначе на телефоне мир получается мелким.
+ */
+const BASE_LONG = 320;
+const BASE_SHORT = 180;
 
 export interface GameHandle {
   setPaused(paused: boolean): void;
@@ -17,7 +20,10 @@ export interface GameHandle {
 
 /** Целочисленный масштаб и размер игрового поля, заполняющий контейнер без дробных пикселей. */
 export const computeViewport = (width: number, height: number): { zoom: number; width: number; height: number } => {
-  const zoom = Math.max(1, Math.floor(Math.min(width / BASE_WIDTH, height / BASE_HEIGHT)));
+  const landscape = width >= height;
+  const baseWidth = landscape ? BASE_LONG : BASE_SHORT;
+  const baseHeight = landscape ? BASE_SHORT : BASE_LONG;
+  const zoom = Math.max(1, Math.floor(Math.min(width / baseWidth, height / baseHeight)));
   return { zoom, width: Math.max(1, Math.floor(width / zoom)), height: Math.max(1, Math.floor(height / zoom)) };
 };
 

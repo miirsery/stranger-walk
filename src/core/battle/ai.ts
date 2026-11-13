@@ -1,4 +1,5 @@
-import type { AttackTarget, CardBattle, Side, UnitState } from './cardBattle';
+import type { CardEffect } from '../content/types';
+import type { AttackTarget, BattleState, CardBattle, Side, UnitState } from './cardBattle';
 import { opponentOf } from './cardBattle';
 
 export type AiAction =
@@ -6,9 +7,28 @@ export type AiAction =
   | { type: 'attack'; attackerUid: number; target: AttackTarget }
   | { type: 'endTurn' };
 
+/** Эффект, который сейчас ничего не даст: лечить здорового героя, бить пустой стол и т.п. */
+const isWasted = (effect: CardEffect, state: BattleState, side: Side): boolean => {
+  const own = state.sides[side];
+  const foe = state.sides[opponentOf(side)];
+  switch (effect.type) {
+    case 'healHero':
+      return own.hero.health >= own.hero.maxHealth;
+    case 'damageAllEnemies':
+      return foe.board.length === 0;
+    case 'buffAllies':
+      return own.board.length === 0;
+    case 'draw':
+      return own.deck.length === 0;
+    case 'damageEnemyHero':
+      return false;
+  }
+};
+
 /**
  * Простой жадный ИИ. Выбирает одно следующее действие: сначала разыгрывает самые дорогие
- * доступные карты, затем атакует (выгодные размены по существам, иначе в героя), затем передаёт ход.
+ * доступные карты (заклинания — только когда от них есть толк), затем атакует: добивает героя,
+ * если урона хватает, иначе выгодно разменивается по существам или бьёт в героя. Затем передаёт ход.
  * Возвращает null, если сейчас не ход этой стороны или бой окончен.
  */
 export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiAction | null => {
@@ -19,7 +39,9 @@ export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiActi
   let bestIndex = -1;
   let bestCost = -1;
   own.hand.forEach((cardId, index) => {
-    const cost = battle.card(cardId).cost;
+    const card = battle.card(cardId);
+    const cost = card.cost;
+    if (card.type === 'spell' && isWasted(card.effect, state, side)) return;
     if (cost > bestCost && battle.canPlay(side, index).ok) {
       bestIndex = index;
       bestCost = cost;
@@ -36,6 +58,12 @@ export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiActi
       .map((target) => foeBoard.find((unit) => unit.uid === target.uid))
       .filter((unit): unit is UnitState => unit !== undefined);
     const canHitHero = targets.some((target) => target.type === 'hero');
+    const foeHero = state.sides[opponentOf(side)].hero;
+    const readyDamage = own.board.reduce((sum, unit) => sum + (unit.canAttack ? unit.attack : 0), 0);
+    // Хватает урона, чтобы закончить бой, — размены уже не нужны.
+    if (canHitHero && readyDamage >= foeHero.health) {
+      return { type: 'attack', attackerUid: attacker.uid, target: { type: 'hero' } };
+    }
     const goodTrade = unitTargets.find((unit) => unit.health <= attacker.attack && unit.attack < attacker.health);
     const fallback = unitTargets[0];
 

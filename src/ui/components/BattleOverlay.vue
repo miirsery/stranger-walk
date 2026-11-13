@@ -402,6 +402,61 @@ watch(
   color: var(--red);
 }
 
+/* Телефон: рука — одна прокручиваемая строка, журнал короче, всё помещается без вертикальной прокрутки. */
+@media (width <= 600px) {
+  .battle {
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .battle__side {
+    gap: 6px;
+    justify-content: flex-start;
+  }
+
+  .battle__row {
+    gap: 8px;
+    min-height: 108px;
+  }
+
+  .battle__status {
+    width: 100%;
+  }
+
+  .battle__log {
+    min-height: 3.4em;
+  }
+
+  .battle__log li:nth-last-child(n + 3) {
+    display: none;
+  }
+
+  .battle__hand {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    min-height: 0;
+    padding: 12px 8px 8px 10px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .battle__hand > li {
+    flex: none;
+    scroll-snap-align: start;
+  }
+
+  .battle__hand :deep(.card) {
+    width: 76px;
+    height: 104px;
+  }
+
+  .battle__hand :deep(.card__art) {
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.75;
