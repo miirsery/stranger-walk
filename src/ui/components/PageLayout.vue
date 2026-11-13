@@ -5,7 +5,7 @@ defineProps<{ title: string }>();
 </script>
 
 <template>
-  <main class="page">
+  <main class="page ui-scale">
     <div class="page__inner">
       <header class="page__header">
         <RouterLink class="pixel-button pixel-button--ghost" to="/">← Меню</RouterLink>

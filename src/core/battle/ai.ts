@@ -4,6 +4,7 @@ import { opponentOf } from './cardBattle';
 
 export type AiAction =
   | { type: 'play'; handIndex: number; target?: AttackTarget }
+  | { type: 'power'; target?: AttackTarget }
   | { type: 'attack'; attackerUid: number; target: AttackTarget }
   | { type: 'endTurn' };
 
@@ -33,15 +34,18 @@ const chooseSpellTarget = (battle: CardBattle, state: BattleState, side: Side, h
   const cardId = state.sides[side].hand[handIndex];
   if (cardId === undefined) return undefined;
   const card = battle.card(cardId);
-  if (card.type !== 'spell') return undefined;
+  return card.type === 'spell' ? chooseEffectTarget(card.effect, state, side) : undefined;
+};
+
+const chooseEffectTarget = (effect: CardEffect, state: BattleState, side: Side): AttackTarget | undefined => {
   const byAttack = (units: UnitState[]): UnitState[] => [...units].sort((a, b) => b.attack - a.attack);
 
-  if (card.effect.type === 'buffTarget') {
+  if (effect.type === 'buffTarget') {
     const best = byAttack(state.sides[side].board)[0];
     return best ? { type: 'unit', uid: best.uid } : undefined;
   }
-  if (card.effect.type === 'damageTarget') {
-    const { amount } = card.effect;
+  if (effect.type === 'damageTarget') {
+    const { amount } = effect;
     const foe = state.sides[opponentOf(side)];
     if (foe.hero.health <= amount) return { type: 'hero' };
     const killable = byAttack(foe.board.filter((unit) => unit.health <= amount))[0];
@@ -77,6 +81,12 @@ export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiActi
     return target ? { type: 'play', handIndex: bestIndex, target } : { type: 'play', handIndex: bestIndex };
   }
 
+  // Осталась мана — в дело идёт сила героя, если от неё будет толк.
+  if (own.power && battle.canUsePower(side).ok && !isWasted(own.power.effect, state, side)) {
+    const target = chooseEffectTarget(own.power.effect, state, side);
+    return target ? { type: 'power', target } : { type: 'power' };
+  }
+
   const attacker = own.board.find((unit) => unit.canAttack && unit.attack > 0);
   if (attacker) {
     const foeBoard = state.sides[opponentOf(side)].board;
@@ -108,6 +118,7 @@ export const performAiStep = (battle: CardBattle, side: Side = 'enemy'): AiActio
   const action = chooseAiAction(battle, side);
   if (!action) return null;
   if (action.type === 'play') battle.playCard(side, action.handIndex, action.target);
+  else if (action.type === 'power') battle.usePower(side, action.target);
   else if (action.type === 'attack') battle.attack(side, action.attackerUid, action.target);
   else battle.endTurn(side);
   return action;

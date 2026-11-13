@@ -2,10 +2,12 @@
 import { storeToRefs } from 'pinia';
 import { audio } from '@/audio/chiptune';
 import PageLayout from '../components/PageLayout.vue';
-import type { TouchControlsMode } from '../stores/settings';
-import { useSettingsStore } from '../stores/settings';
+import type { TouchControlsMode, UiScale } from '../stores/settings';
+import { UI_SCALES, useSettingsStore } from '../stores/settings';
 
-const { musicVolume, sfxVolume, touchControls } = storeToRefs(useSettingsStore());
+const { musicVolume, sfxVolume, touchControls, uiScale } = storeToRefs(useSettingsStore());
+
+const scaleLabel = (scale: UiScale): string => (scale === 'auto' ? 'Авто' : `×${scale}`);
 
 const touchOptions: { value: TouchControlsMode; label: string }[] = [
   { value: 'auto', label: 'Авто' },
@@ -37,6 +39,25 @@ const percent = (value: number): string => `${Math.round(value * 100)}%`;
         />
         <output>{{ percent(sfxVolume) }}</output>
       </label>
+    </section>
+    <section class="pixel-panel settings">
+      <fieldset class="settings__group">
+        <legend>Размер интерфейса</legend>
+        <div class="settings__options">
+          <button
+            v-for="scale in UI_SCALES"
+            :key="scale"
+            type="button"
+            class="pixel-button"
+            :class="{ 'pixel-button--ghost': uiScale !== scale }"
+            :aria-pressed="uiScale === scale"
+            @click="uiScale = scale"
+          >
+            {{ scaleLabel(scale) }}
+          </button>
+        </div>
+      </fieldset>
+      <p class="settings__note">«Авто» увеличивает текст и кнопки на больших мониторах. Игровое поле масштабируется отдельно.</p>
     </section>
     <section class="pixel-panel settings">
       <fieldset class="settings__group">

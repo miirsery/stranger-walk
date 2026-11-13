@@ -83,6 +83,18 @@ export class QuestLog {
     return progress;
   }
 
+  /** Отладка: завершает все активные квесты и возвращает их (награды выдаёт вызывающий код). */
+  completeActive(): QuestDef[] {
+    const completed: QuestDef[] = [];
+    for (const entry of this.entries.values()) {
+      if (entry.status !== 'active') continue;
+      for (const objective of entry.def.objectives) entry.done.add(objective.id);
+      entry.status = 'completed';
+      completed.push(entry.def);
+    }
+    return completed;
+  }
+
   /** Снимок для сохранения. */
   snapshot(): QuestSave[] {
     return [...this.entries.values()].map((entry) => ({

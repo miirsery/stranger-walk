@@ -74,6 +74,13 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
   list-style: none;
 }
 
+/* Телефон: сверху полоса мини-игры в две строки. */
+@media (width <= 600px) {
+  .memory {
+    inset: 96px 8px 8px;
+  }
+}
+
 @media (width >= 700px) {
   .memory__grid {
     grid-template-columns: repeat(6, 76px);

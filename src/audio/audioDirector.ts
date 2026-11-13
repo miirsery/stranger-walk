@@ -25,6 +25,7 @@ export const attachAudio = (session: GameSession, audio: ChiptuneAudio): (() => 
         audio.playSfx('blip');
         break;
       case 'questStarted':
+      case 'minigameStarted':
         audio.playSfx('confirm');
         break;
       case 'questCompleted':

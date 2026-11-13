@@ -6,7 +6,13 @@ export const bosses: Record<string, BossDef> = {
     name: 'Хранитель Колоды',
     title: 'Повелитель замка',
     setting: 'castle',
-    health: 22,
+    health: 26,
+    power: {
+      name: 'Приказ Хранителя',
+      text: 'Его существа получают +1 к атаке.',
+      cost: 2,
+      effect: { type: 'buffAllies', attack: 1, health: 0 },
+    },
     music: 'battle',
     deck: [
       'squire', 'squire', 'archer', 'archer', 'ghost', 'ghost',
@@ -23,7 +29,13 @@ export const bosses: Record<string, BossDef> = {
     setting: 'space',
     // Здоровье и быстрая колода подобраны симуляцией (см. balance.test.ts):
     // прежний вариант с 25 здоровья проигрывал собранной колоде игрока в 87% боёв.
-    health: 44,
+    health: 48,
+    power: {
+      name: 'Орбитальный залп',
+      text: '2 урона герою противника.',
+      cost: 2,
+      effect: { type: 'damageEnemyHero', amount: 2 },
+    },
     music: 'battle',
     deck: [
       'archer', 'archer', 'fox', 'fox', 'torpedo', 'torpedo', 'turret', 'turret',

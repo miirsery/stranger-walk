@@ -141,9 +141,25 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
   color: var(--muted);
 }
 
-@media (width <= 520px) {
-  .hud__deck {
+/* Телефон: панель квестов сжата до текущей цели, чтобы не закрывать мир и не лезть под уведомления. */
+@media (width <= 600px), (height <= 480px) {
+  .hud__deck,
+  .hud__objective--done,
+  .hud__quest ~ .hud__quest,
+  .hud__quest ~ .hud__empty,
+  .hud__objective:not(.hud__objective--done) ~ .hud__objective:not(.hud__objective--done) {
     display: none;
+  }
+
+  .hud__quests {
+    gap: 4px;
+    max-width: calc(100% - 76px);
+    padding: 8px 10px;
+    font-size: 8px;
+  }
+
+  .hud__cards {
+    padding: 10px;
   }
 }
 </style>

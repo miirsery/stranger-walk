@@ -189,6 +189,14 @@ export interface SpellCardDef extends CardBase {
 
 export type CardDef = UnitCardDef | SpellCardDef;
 
+/** Сила героя: способность, доступная раз в ход за ману. У каждого босса своя. */
+export interface HeroPowerDef {
+  name: string;
+  text: string;
+  cost: number;
+  effect: CardEffect;
+}
+
 export interface DeckRules {
   minSize: number;
   maxSize: number;
@@ -202,6 +210,7 @@ export interface BossDef {
   setting: SettingId;
   health: number;
   deck: CardId[];
+  power?: HeroPowerDef;
   music: TrackId;
   rewardCards: CardId[];
   winLines: string[];
@@ -264,6 +273,7 @@ export interface PlayerDef {
   /** Скорость в пикселях мира в секунду. */
   speed: number;
   heroHealth: number;
+  power?: HeroPowerDef;
   startLevel: LevelId;
   starterDeck: CardId[];
 }

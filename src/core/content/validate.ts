@@ -168,6 +168,9 @@ export const validateContent = (content: GameContent): string[] => {
     needCards(boss.deck, `Босс ${boss.id}`);
     needCards(boss.rewardCards, `Босс ${boss.id}`);
     if (boss.deck.length === 0) errors.push(`Босс ${boss.id}: пустая колода`);
+    if (boss.power && (boss.power.cost < 0 || !effectIsValid(boss.power.effect))) {
+      errors.push(`Босс ${boss.id}: некорректная сила героя`);
+    }
   }
 
   for (const minigame of Object.values(content.minigames)) {
@@ -182,6 +185,10 @@ export const validateContent = (content: GameContent): string[] => {
   }
 
   need(content.levels, 'уровень', content.player.startLevel, 'Игрок');
+  const playerPower = content.player.power;
+  if (playerPower && (playerPower.cost < 0 || !effectIsValid(playerPower.effect))) {
+    errors.push('Игрок: некорректная сила героя');
+  }
   needCards(content.player.starterDeck, 'Игрок');
   const { minSize, maxSize } = content.deckRules;
   if (content.player.starterDeck.length < minSize || content.player.starterDeck.length > maxSize) {

@@ -45,6 +45,7 @@ export class WorldScene extends Phaser.Scene {
       }
     });
     this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
+    this.game.events.emit('world-ready');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
       this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCamera, this);

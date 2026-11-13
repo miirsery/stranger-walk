@@ -11,12 +11,21 @@ const props = defineProps<{ session: GameSession; state: BattleState }>();
 const selectedUid = ref<number | null>(null);
 /** Индекс заклинания в руке, для которого сейчас выбирается цель. */
 const aimingIndex = ref<number | null>(null);
+/** Выбирается цель для силы героя. */
+const aimingPower = ref(false);
+/** Индексы карт стартовой руки, отмеченных на замену. */
+const mulliganPicks = ref<number[]>([]);
 const message = ref('');
 
 const player = computed(() => props.state.sides.player);
 const enemy = computed(() => props.state.sides.enemy);
-const myTurn = computed(() => props.state.active === 'player' && props.state.winner === null);
-const enemyTurn = computed(() => props.state.active === 'enemy' && props.state.winner === null);
+const mulliganPhase = computed(() => props.state.phase === 'mulligan' && props.state.winner === null);
+const myTurn = computed(
+  () => props.state.phase === 'play' && props.state.active === 'player' && props.state.winner === null,
+);
+const enemyTurn = computed(
+  () => props.state.phase === 'play' && props.state.active === 'enemy' && props.state.winner === null,
+);
 const lastLog = computed(() => props.state.log.slice(-4));
 
 /** Пауза между действиями противника, чтобы игрок успевал следить за ходом. */
@@ -46,6 +55,7 @@ const TUTORIAL_STEPS = [
 ] as const;
 const tutorialStep = ref(settings.battleTutorialDone ? TUTORIAL_STEPS.length : 0);
 const tutorialText = computed(() => TUTORIAL_STEPS[tutorialStep.value] ?? null);
+const showTutorial = computed(() => tutorialText.value !== null && props.state.phase === 'play' && !props.state.winner);
 const playerAttacked = ref(false);
 
 const finishTutorial = (): void => {
@@ -71,15 +81,65 @@ const targets = computed<AttackTarget[]>(() => {
   const mode = props.session.mode;
   // Обращение к props.state делает вычисление зависимым от снимка боя.
   if (mode.kind !== 'battle' || !myTurn.value || props.state.turn === 0) return [];
+  if (aimingPower.value) return mode.battle.validPowerTargets('player');
   if (aimingIndex.value !== null) return mode.battle.validPlayTargets('player', aimingIndex.value);
   return selectedUid.value === null ? [] : mode.battle.validTargets('player');
 });
 /** Заклинание усиления целится в свои существа, всё остальное — во врага. */
 const aimingAtAllies = computed(() => {
   const mode = props.session.mode;
+  if (mode.kind !== 'battle') return false;
+  if (aimingPower.value) return mode.battle.powerTargeting('player') === 'ally';
   const cardId = aimingIndex.value === null ? undefined : player.value.hand[aimingIndex.value];
-  return mode.kind === 'battle' && cardId !== undefined && mode.battle.targetingOf(cardId) === 'ally';
+  return cardId !== undefined && mode.battle.targetingOf(cardId) === 'ally';
 });
+/** Идёт выбор цели — для заклинания или для силы героя. */
+const aiming = computed(() => aimingIndex.value !== null || aimingPower.value);
+
+const cancelAiming = (): void => {
+  aimingIndex.value = null;
+  aimingPower.value = false;
+};
+
+// ---------- Сила героя ----------
+const powerReady = computed(
+  () => myTurn.value && player.value.power !== null && !player.value.powerUsed && player.value.power.cost <= player.value.mana,
+);
+
+const usePower = (): void => {
+  const mode = props.session.mode;
+  if (mode.kind !== 'battle') return;
+  selectedUid.value = null;
+  aimingIndex.value = null;
+  if (aimingPower.value) {
+    aimingPower.value = false;
+    message.value = '';
+    return;
+  }
+  if (mode.battle.powerTargeting('player') === 'none') {
+    report(props.session.battleUsePower());
+    return;
+  }
+  const check = mode.battle.canUsePower('player');
+  if (!check.ok) {
+    report(check);
+    return;
+  }
+  aimingPower.value = true;
+  message.value = 'Выбери цель для силы героя';
+};
+
+// ---------- Замена стартовой руки ----------
+const toggleMulligan = (index: number): void => {
+  mulliganPicks.value = mulliganPicks.value.includes(index)
+    ? mulliganPicks.value.filter((item) => item !== index)
+    : [...mulliganPicks.value, index];
+};
+
+const confirmMulligan = (): void => {
+  report(props.session.battleMulligan(mulliganPicks.value));
+  mulliganPicks.value = [];
+};
 const hasTarget = (uid: number): boolean => targets.value.some((target) => target.type === 'unit' && target.uid === uid);
 const canTargetHero = computed(() => !aimingAtAllies.value && targets.value.some((target) => target.type === 'hero'));
 const canTargetUnit = (uid: number): boolean => !aimingAtAllies.value && hasTarget(uid);
@@ -115,6 +175,7 @@ const report = (result: { ok: true } | { ok: false; reason: string }): void => {
 
 const playCard = (index: number): void => {
   selectedUid.value = null;
+  aimingPower.value = false;
   const mode = props.session.mode;
   const cardId = player.value.hand[index];
   const needsTarget = mode.kind === 'battle' && cardId !== undefined && mode.battle.targetingOf(cardId) !== 'none';
@@ -139,14 +200,14 @@ const playCard = (index: number): void => {
 };
 
 const castAt = (target: AttackTarget): void => {
-  if (aimingIndex.value === null) return;
-  report(props.session.battlePlayCard(aimingIndex.value, target));
-  aimingIndex.value = null;
+  if (aimingPower.value) report(props.session.battleUsePower(target));
+  else if (aimingIndex.value !== null) report(props.session.battlePlayCard(aimingIndex.value, target));
+  cancelAiming();
 };
 
 const selectUnit = (unit: UnitState): void => {
   if (!myTurn.value) return;
-  if (aimingIndex.value !== null) {
+  if (aiming.value) {
     if (canTargetAlly(unit.uid)) castAt({ type: 'unit', uid: unit.uid });
     return;
   }
@@ -159,7 +220,7 @@ const selectUnit = (unit: UnitState): void => {
 };
 
 const attack = (target: AttackTarget): void => {
-  if (aimingIndex.value !== null) {
+  if (aiming.value) {
     castAt(target);
     return;
   }
@@ -177,7 +238,7 @@ const attack = (target: AttackTarget): void => {
 
 const endTurn = (): void => {
   selectedUid.value = null;
-  aimingIndex.value = null;
+  cancelAiming();
   const result = props.session.battleEndTurn();
   report(result);
   if (result.ok) runEnemyTurn();
@@ -192,13 +253,13 @@ watch(
   () => props.state.winner,
   () => {
     selectedUid.value = null;
-    aimingIndex.value = null;
+    cancelAiming();
   },
 );
 </script>
 
 <template>
-  <section class="battle" aria-label="Карточный бой">
+  <section class="battle" :class="{ 'battle--tutorial': showTutorial }" aria-label="Карточный бой">
     <header class="battle__side">
       <button
         type="button"
@@ -210,7 +271,12 @@ watch(
         <span class="battle__hero-name">{{ enemy.hero.name }}</span>
         <span :key="enemy.hero.health" class="battle__hp">♥ {{ Math.max(0, enemy.hero.health) }}</span>
       </button>
-      <p class="battle__meta">Рука: {{ enemy.hand.length }} · Колода: {{ enemy.deck.length }}</p>
+      <p class="battle__meta">
+        Рука: {{ enemy.hand.length }} · Колода: {{ enemy.deck.length }}
+        <span v-if="enemy.power" class="battle__enemy-power" :title="enemy.power.text">
+          · Сила: {{ enemy.power.name }} ({{ enemy.power.cost }}) — {{ enemy.power.text }}
+        </span>
+      </p>
     </header>
 
     <div class="battle__board">
@@ -239,7 +305,7 @@ watch(
             type="button"
             class="battle__slot"
             :class="{
-              'battle__slot--ready': myTurn && unit.canAttack && aimingIndex === null,
+              'battle__slot--ready': myTurn && unit.canAttack && !aiming,
               'battle__slot--selected': selectedUid === unit.uid,
               'battle__slot--ally-target': canTargetAlly(unit.uid),
               'battle__slot--lunge-up': lungeUid === unit.uid,
@@ -256,7 +322,7 @@ watch(
     </div>
 
     <footer class="battle__side battle__side--player">
-      <aside v-if="tutorialText && !state.winner" class="pixel-panel battle__tutorial" aria-live="polite">
+      <aside v-if="showTutorial" class="pixel-panel battle__tutorial" aria-live="polite">
         <p class="battle__tutorial-step">Обучение · {{ tutorialStep + 1 }}/{{ TUTORIAL_STEPS.length }}</p>
         <p>{{ tutorialText }}</p>
         <button type="button" class="pixel-button pixel-button--ghost battle__tutorial-skip" @click="finishTutorial">
@@ -276,6 +342,19 @@ watch(
         <ol class="battle__log" aria-label="Журнал боя" aria-live="polite">
           <li v-for="(line, index) in lastLog" :key="`${state.log.length}-${index}`">{{ line }}</li>
         </ol>
+        <button
+          v-if="player.power"
+          type="button"
+          class="pixel-button battle__power"
+          :class="{ 'pixel-button--ghost': !powerReady, 'battle__power--aiming': aimingPower }"
+          :disabled="!powerReady && !aimingPower"
+          :title="player.power.text"
+          @click="usePower"
+        >
+          <span class="battle__power-cost">{{ player.power.cost }}</span>
+          {{ player.power.name }}
+          <span class="battle__power-text">{{ player.powerUsed ? 'использована' : player.power.text }}</span>
+        </button>
         <div class="battle__actions">
           <button type="button" class="pixel-button" :disabled="!myTurn" @click="endTurn">
             {{ enemyTurn ? 'Ход врага…' : 'Конец хода' }}
@@ -301,6 +380,33 @@ watch(
         </li>
       </ul>
     </footer>
+
+    <div v-if="mulliganPhase" class="battle__result" role="dialog" aria-modal="true" aria-label="Стартовая рука">
+      <div class="pixel-panel battle__mulligan">
+        <h2 class="battle__mulligan-title">Стартовая рука</h2>
+        <p>Отметь карты, которые хочешь заменить, — вместо них придут другие из колоды.</p>
+        <ul class="battle__mulligan-hand">
+          <li v-for="(cardId, index) in player.hand" :key="`${index}-${cardId}`">
+            <button
+              type="button"
+              class="battle__slot"
+              :class="{ 'battle__slot--discard': mulliganPicks.includes(index) }"
+              :aria-pressed="mulliganPicks.includes(index)"
+              :title="card(cardId).text"
+              @click="toggleMulligan(index)"
+            >
+              <CardFace :card="card(cardId)" :tint="tint(cardId)" />
+            </button>
+          </li>
+        </ul>
+        <div class="battle__actions battle__actions--center">
+          <button type="button" class="pixel-button" autofocus @click="confirmMulligan">
+            {{ mulliganPicks.length ? `Заменить: ${mulliganPicks.length}` : 'Оставить руку' }}
+          </button>
+          <button type="button" class="pixel-button pixel-button--ghost" @click="session.leaveBattle()">Сдаться</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="state.winner" class="battle__result" role="dialog" aria-modal="true" aria-label="Итог боя">
       <div class="pixel-panel battle__result-box">
@@ -582,6 +688,74 @@ watch(
   font-size: 8px;
 }
 
+.battle__enemy-power {
+  color: var(--gold);
+}
+
+.battle__power {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 8px 10px;
+  font-size: 8px;
+  text-align: left;
+}
+
+.battle__power-cost {
+  display: grid;
+  grid-row: 1 / 3;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+  color: var(--text);
+  background: #3d6fd9;
+  border: 3px solid var(--ink);
+}
+
+.battle__power-text {
+  font-size: 7px;
+  opacity: 0.8;
+}
+
+.battle__power--aiming {
+  background: var(--text);
+}
+
+.battle__mulligan {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 520px);
+  padding: 20px;
+  font-size: 9px;
+  text-align: center;
+}
+
+.battle__mulligan-title {
+  font-size: 16px;
+  color: var(--gold);
+}
+
+.battle__mulligan-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  padding: 10px 0 0;
+  margin: 0;
+  list-style: none;
+}
+
+.battle__slot--discard {
+  filter: grayscale(1) brightness(0.55);
+  transform: translateY(8px) rotate(-4deg);
+}
+
+.battle__actions--center {
+  justify-content: center;
+}
+
 .battle__result {
   position: absolute;
   inset: 0;
@@ -659,6 +833,123 @@ watch(
   .battle__hand :deep(.card__art) {
     height: 28px;
     font-size: 12px;
+  }
+}
+
+/* Телефон в портрете: герой и мана в одну строку; пока идёт обучение, журнал уступает ему место. */
+@media (width <= 600px) {
+  .battle__status {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .battle__status > :not(.battle__hero, .battle__mana) {
+    grid-column: 1 / -1;
+  }
+
+  .battle__hero {
+    padding: 6px 10px;
+  }
+
+  .battle--tutorial .battle__log {
+    display: none;
+  }
+
+  .battle__tutorial {
+    gap: 4px;
+    padding: 8px 10px;
+    font-size: 7px;
+  }
+
+  .battle__row {
+    min-height: 100px;
+    padding-top: 6px;
+  }
+}
+
+/* Телефон в альбомной ориентации: стол слева, статус и кнопки — колонкой справа. */
+@media (height <= 480px) and (width > 600px) {
+  .battle {
+    grid-template:
+      'head tutorial' auto
+      'board tutorial' 1fr
+      'hand status' auto
+      / 1fr 230px;
+    gap: 4px 12px;
+    padding: 8px 64px 8px 8px;
+  }
+
+  .battle__side {
+    grid-area: head;
+    justify-content: flex-start;
+  }
+
+  .battle__side--player {
+    display: contents;
+  }
+
+  .battle__board {
+    grid-area: board;
+    zoom: 0.76;
+  }
+
+  .battle__hand {
+    grid-area: hand;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    min-height: 0;
+    padding: 10px 8px 6px 10px;
+    overflow-x: auto;
+    zoom: 0.76;
+  }
+
+  .battle__hand > li {
+    flex: none;
+  }
+
+  .battle__row {
+    min-height: 104px;
+  }
+
+  .battle__status {
+    grid-area: status;
+    grid-template-columns: auto 1fr;
+    align-content: end;
+    align-items: center;
+    width: auto;
+  }
+
+  .battle__status > :not(.battle__hero, .battle__mana) {
+    grid-column: 1 / -1;
+  }
+
+  /* Без обучения правая колонка целиком отдана статусу и журналу. */
+  .battle:not(.battle--tutorial) .battle__status {
+    grid-row: 2 / 4;
+  }
+
+  .battle__hero {
+    padding: 6px 10px;
+  }
+
+  .battle__actions .pixel-button {
+    padding: 8px 10px;
+  }
+
+  .battle__tutorial {
+    grid-area: tutorial;
+    align-self: start;
+    gap: 4px;
+    padding: 8px;
+    font-size: 7px;
+  }
+
+  .battle__log {
+    min-height: 0;
+  }
+
+  .battle--tutorial .battle__log {
+    display: none;
   }
 }
 

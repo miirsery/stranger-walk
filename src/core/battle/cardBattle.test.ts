@@ -326,6 +326,104 @@ describe('заклинания с целью и эффекты гибели', ()
   });
 });
 
+describe('замена стартовой руки', () => {
+  const deck = ['grunt', 'giant', 'grunt', 'giant', 'grunt', 'giant', 'grunt', 'giant', 'grunt', 'giant'];
+  const create = (): CardBattle =>
+    new CardBattle({
+      resolveCard,
+      player: { name: 'Игрок', health: 10, deck },
+      enemy: { name: 'Враг', health: 10, deck },
+      rng: createRng(5),
+      mulligan: true,
+    });
+
+  it('до замены ходить нельзя, первый ход начинается после неё', () => {
+    const battle = create();
+    expect(battle.phase).toBe('mulligan');
+    expect(battle.snapshot().sides.player.hand).toHaveLength(3);
+    expect(battle.playCard('player', 0).ok).toBe(false);
+    expect(battle.endTurn('player').ok).toBe(false);
+
+    expect(battle.mulligan([])).toEqual({ ok: true });
+    const state = battle.snapshot();
+    expect(state.phase).toBe('play');
+    expect(state.active).toBe('player');
+    expect(state.sides.player.hand).toHaveLength(4);
+    expect(state.sides.player.mana).toBe(1);
+    expect(battle.mulligan([0]).ok).toBe(false);
+  });
+
+  it('заменённые карты уходят в колоду, размер руки и колоды сохраняется', () => {
+    const battle = create();
+    const before = battle.snapshot().sides.player;
+    battle.mulligan([0, 2, 2, 99]);
+    const after = battle.snapshot().sides.player;
+    // 3 карты в руке + 1 за первый ход; всего карт по-прежнему 10.
+    expect(after.hand).toHaveLength(4);
+    expect(after.hand.length + after.deck.length).toBe(before.hand.length + before.deck.length);
+    expect(after.hand[0]).toBe(before.hand[1]);
+  });
+
+  it('противник сбрасывает дорогие карты', () => {
+    const battle = create();
+    const giantsBefore = battle.snapshot().sides.enemy.hand.filter((cardId) => cardId === 'giant').length;
+    expect(giantsBefore).toBeGreaterThan(0);
+    battle.mulligan([]);
+    expect(battle.snapshot().sides.enemy.hand).toHaveLength(3);
+  });
+});
+
+describe('сила героя', () => {
+  const withPowers = (playerEffect: CardEffect, cost = 1): CardBattle =>
+    new CardBattle({
+      resolveCard,
+      player: { name: 'Игрок', health: 10, deck: many('grunt', 10), power: { name: 'Сила', text: '', cost, effect: playerEffect } },
+      enemy: { name: 'Враг', health: 10, deck: many('grunt', 10) },
+      rng: createRng(42),
+    });
+
+  it('тратит ману и работает один раз за ход', () => {
+    const battle = withPowers({ type: 'damageEnemyHero', amount: 2 });
+    expect(battle.usePower('player')).toEqual({ ok: true });
+    expect(battle.snapshot().sides.enemy.hero.health).toBe(8);
+    expect(battle.snapshot().sides.player.mana).toBe(0);
+    expect(battle.usePower('player').ok).toBe(false);
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    expect(battle.usePower('player')).toEqual({ ok: true });
+    expect(battle.snapshot().sides.enemy.hero.health).toBe(6);
+  });
+
+  it('недоступна без маны и у героя без силы', () => {
+    const battle = withPowers({ type: 'damageEnemyHero', amount: 2 }, 3);
+    expect(battle.usePower('player')).toEqual({ ok: false, reason: 'Не хватает маны' });
+    battle.endTurn('player');
+    expect(battle.usePower('enemy')).toEqual({ ok: false, reason: 'У героя нет силы' });
+  });
+
+  it('сила с выбором цели требует цель', () => {
+    const battle = withPowers({ type: 'damageTarget', amount: 1 });
+    expect(battle.powerTargeting('player')).toBe('enemy');
+    expect(battle.usePower('player')).toEqual({ ok: false, reason: 'Нужно выбрать цель' });
+    expect(battle.validPowerTargets('player')).toEqual([{ type: 'hero' }]);
+    expect(battle.usePower('player', { type: 'hero' })).toEqual({ ok: true });
+    expect(battle.snapshot().sides.enemy.hero.health).toBe(9);
+  });
+
+  it('ИИ применяет силу, когда карты сыграть уже нельзя', () => {
+    const battle = new CardBattle({
+      resolveCard,
+      player: { name: 'Игрок', health: 10, deck: many('grunt', 10) },
+      enemy: { name: 'Враг', health: 10, deck: many('giant', 10), power: { name: 'Залп', text: '', cost: 1, effect: { type: 'damageEnemyHero', amount: 1 } } },
+      rng: createRng(42),
+    });
+    battle.endTurn('player');
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'power' });
+    expect(battle.snapshot().sides.player.hero.health).toBe(9);
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'endTurn' });
+  });
+});
+
 describe('playAiTurn', () => {
   it('по шагам: карта, атака, конец хода; вне своего хода ИИ не действует', () => {
     const battle = createBattle(many('grunt', 10), many('rusher', 10));

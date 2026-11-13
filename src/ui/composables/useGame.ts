@@ -4,7 +4,7 @@ import { gameContent } from '@content/index';
 import type { BattleState } from '@core/battle/cardBattle';
 import type { MinigameDef } from '@core/content/types';
 import type { QuestView } from '@core/quests/questLog';
-import type { DialogState, Mode, SessionEvent } from '@core/session/gameSession';
+import type { DialogState, MinigamePhase, Mode, SessionEvent } from '@core/session/gameSession';
 import { GameSession } from '@core/session/gameSession';
 import { attachAudio } from '@/audio/audioDirector';
 import { audio } from '@/audio/chiptune';
@@ -23,6 +23,9 @@ export interface GameBridge {
   modeKind: Ref<Mode['kind']>;
   /** Тип идущей мини-игры — UI решает, что рисовать поверх канваса. */
   minigameType: Ref<MinigameDef['type'] | null>;
+  minigamePhase: Ref<MinigamePhase | null>;
+  /** true, пока движок загружается и мир ещё не отрисован. */
+  loading: Ref<boolean>;
   levelName: Ref<string>;
   dialog: ShallowRef<DialogState | null>;
   battle: ShallowRef<BattleState | null>;
@@ -52,6 +55,7 @@ export interface GameOptions {
 }
 
 const TOAST_MS = 4000;
+const LOADER_FALLBACK_MS = 8000;
 /** Позиция игрока дозаписывается с таким интервалом; важные события сохраняются сразу. */
 const AUTOSAVE_MS = 5000;
 
@@ -68,6 +72,8 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
 
   const modeKind = ref<Mode['kind']>('world');
   const minigameType = ref<MinigameDef['type'] | null>(null);
+  const minigamePhase = ref<MinigamePhase | null>(null);
+  const loading = ref(true);
   const levelName = ref('');
   const dialog = shallowRef<DialogState | null>(null);
   const battle = shallowRef<BattleState | null>(null);
@@ -98,6 +104,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     const mode = session.mode;
     modeKind.value = mode.kind;
     minigameType.value = mode.kind === 'minigame' ? mode.def.type : null;
+    minigamePhase.value = mode.kind === 'minigame' ? mode.phase : null;
     levelName.value = session.world.level.name;
     dialog.value = mode.kind === 'dialog' ? { ...mode.dialog } : null;
     battle.value = mode.kind === 'battle' ? mode.battle.snapshot() : null;
@@ -106,10 +113,9 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     deckSize.value = session.cards.deck.length;
   };
 
-  // Сохраняем только из мира и диалога: мини-игра и бой попадают в прогресс по завершении.
-  const saveNow = (): void => {
-    if (session.mode.kind === 'world' || session.mode.kind === 'dialog') storage.save(session.serialize());
-  };
+  // Снимок не содержит состояния боя и мини-игры, поэтому сохранять можно в любой момент:
+  // загрузка вернёт игрока в мир со всеми уже полученными наградами.
+  const saveNow = (): void => storage.save(session.serialize());
 
   let hintFrame = 0;
   const watchInteraction = (): void => {
@@ -172,7 +178,14 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     const { createGame } = await import('@/render/createGame');
     // Компонент могли размонтировать, пока грузился чанк с Phaser.
     if (!container.value) return;
-    handle = createGame(container.value, session, input);
+    handle = createGame(container.value, session, input, () => {
+      loading.value = false;
+    });
+    // Страховка: если кадр так и не отрисовался (вкладка в фоне), не держим игрока на загрузке вечно.
+    const fallback = setTimeout(() => {
+      loading.value = false;
+    }, LOADER_FALLBACK_MS);
+    cleanups.push(() => clearTimeout(fallback));
     syncPause();
   });
 
@@ -186,5 +199,5 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, setPaused, setPanel, refresh, interactTarget, saveNow };
+  return { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, setPaused, setPanel, refresh, interactTarget, saveNow };
 };

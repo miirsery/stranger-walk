@@ -20,12 +20,17 @@ const items = [
 ];
 
 // Музыка меню — тема стартового мира; зазвучит после первого жеста пользователя.
-onMounted(() => audio.playTrack(gameContent.music.fields ?? null));
+onMounted(() => {
+  audio.playTrack(gameContent.music.fields ?? null);
+  // Пока игрок в меню, заранее скачиваем движок и экран игры — старт будет быстрее.
+  void import('@/render/createGame');
+  void import('./GameView.vue');
+});
 onBeforeUnmount(() => audio.playTrack(null));
 </script>
 
 <template>
-  <main class="menu">
+  <main class="menu ui-scale">
     <div class="menu__stars" aria-hidden="true" />
     <div class="menu__box">
       <p class="menu__kicker">пиксельная карточная RPG</p>

@@ -15,6 +15,12 @@ export const gameContent: GameContent = {
     look: { body: 0xd94f4f, skin: 0xf0c9a0, hat: 0x6b3f1d },
     speed: 72,
     heroHealth: 20,
+    power: {
+      name: 'Меткий бросок',
+      text: '1 урон выбранной цели.',
+      cost: 2,
+      effect: { type: 'damageTarget', amount: 1 },
+    },
     startLevel: 'meadow',
     starterDeck: ['sprout', 'sprout', 'scarecrow', 'scarecrow', 'fox', 'fox', 'reaper', 'reaper'],
   },

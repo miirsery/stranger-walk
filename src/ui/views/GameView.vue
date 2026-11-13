@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { isDebugEnabled } from '@/platform/debugMode';
 import { localSaveStorage } from '@/platform/saveStorage';
 import BattleOverlay from '../components/BattleOverlay.vue';
+import DebugPanel from '../components/DebugPanel.vue';
 import DeckOverlay from '../components/DeckOverlay.vue';
 import DialogBox from '../components/DialogBox.vue';
 import GameHud from '../components/GameHud.vue';
+import GameLoader from '../components/GameLoader.vue';
 import JournalOverlay from '../components/JournalOverlay.vue';
 import MemoryBoard from '../components/MemoryBoard.vue';
 import MinigameHud from '../components/MinigameHud.vue';
@@ -18,20 +21,23 @@ const container = ref<HTMLElement | null>(null);
 const route = useRoute();
 const router = useRouter();
 const game = useGame(container, { storage: localSaveStorage, continueGame: route.query.continue === '1' });
-const { session, input, modeKind, minigameType, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, interactTarget } = game;
+const debug = isDebugEnabled();
+const { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, interactTarget } = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
 const showTouch = computed(
   () =>
-    modeKind.value !== 'battle' &&
-    minigameType.value !== 'memory' &&
+    // Джойстик нужен только там, где есть движение: в мире и в идущей мини-игре с полем.
+    (modeKind.value === 'world' || (minigameType.value === 'catch' && minigamePhase.value === 'playing')) &&
+    !loading.value &&
     !paused.value &&
     panel.value === null &&
     (settings.touchControls === 'on' || (settings.touchControls === 'auto' && coarsePointer)),
 );
 
 const onKeyDown = (event: KeyboardEvent): void => {
+  if (loading.value) return;
   if (event.code === 'Escape') {
     if (panel.value) game.setPanel(null);
     else game.setPaused(!paused.value);
@@ -45,7 +51,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown);
   // После старта новая игра уже сохранена: перезагрузка страницы должна её продолжить.
-  if (route.query.continue !== '1') void router.replace({ query: { continue: '1' } });
+  if (route.query.continue !== '1') void router.replace({ query: { ...route.query, continue: '1' } });
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
 </script>
@@ -54,41 +60,49 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
   <main class="game">
     <div ref="container" class="game__canvas" />
 
-    <GameHud
-      v-if="modeKind === 'world' || modeKind === 'dialog'"
-      :level-name="levelName"
-      :quests="quests"
-      :card-total="cardTotal"
-      :deck-size="deckSize"
-      @open-deck="game.setPanel('deck')"
-      @open-journal="game.setPanel('journal')"
-    />
-    <MinigameHud v-if="modeKind === 'minigame'" :session="session" />
-    <MemoryBoard v-if="minigameType === 'memory'" :session="session" />
-    <BattleOverlay v-if="battle" :session="session" :state="battle" />
-    <TouchControls v-if="showTouch" :input="input" />
-    <p v-if="interactTarget && !paused && !panel" class="pixel-panel game__hint">
-      <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> поговорить: {{ interactTarget }}
-    </p>
-    <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
+    <!-- Весь интерфейс поверх канваса: масштабируется настройкой «Размер интерфейса». -->
+    <div class="game__ui ui-scale" :class="{ 'game__ui--touch': showTouch }">
+      <GameHud
+        v-if="modeKind === 'world' || modeKind === 'dialog'"
+        :level-name="levelName"
+        :quests="quests"
+        :card-total="cardTotal"
+        :deck-size="deckSize"
+        @open-deck="game.setPanel('deck')"
+        @open-journal="game.setPanel('journal')"
+      />
+      <MemoryBoard v-if="minigameType === 'memory' && minigamePhase !== 'intro'" :session="session" />
+      <MinigameHud v-if="minigamePhase" :session="session" :phase="minigamePhase" />
+      <BattleOverlay v-if="battle" :session="session" :state="battle" />
+      <TouchControls v-if="showTouch" :input="input" />
+      <p v-if="interactTarget && !paused && !panel" class="pixel-panel game__hint">
+        <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> <span class="game__hint-verb">поговорить:</span> {{ interactTarget }}
+      </p>
+      <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
 
-    <ul class="game__toasts" aria-live="polite">
-      <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>
-    </ul>
+      <ul class="game__toasts" aria-live="polite">
+        <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>
+      </ul>
 
-    <DeckOverlay v-if="panel === 'deck'" :session="session" @close="game.setPanel(null)" @changed="game.refresh()" />
-    <JournalOverlay v-if="panel === 'journal'" :session="session" :quests="quests" @close="game.setPanel(null)" />
+      <DeckOverlay v-if="panel === 'deck'" :session="session" @close="game.setPanel(null)" @changed="game.refresh()" />
+      <JournalOverlay v-if="panel === 'journal'" :session="session" :quests="quests" @close="game.setPanel(null)" />
 
-    <button
-      v-if="!paused && !panel"
-      type="button"
-      class="pixel-button pixel-button--ghost game__pause"
-      aria-label="Пауза"
-      @click="game.setPaused(true)"
-    >
-      II
-    </button>
-    <PauseMenu v-if="paused" @resume="game.setPaused(false)" />
+      <button
+        v-if="!paused && !panel"
+        type="button"
+        class="pixel-button pixel-button--ghost game__pause"
+        aria-label="Пауза"
+        @click="game.setPaused(true)"
+      >
+        II
+      </button>
+      <DebugPanel v-if="debug && !paused && !panel" :session="session" :mode-kind="modeKind" @changed="game.refresh()" />
+      <PauseMenu v-if="paused" @resume="game.setPaused(false)" />
+
+      <Transition name="loader">
+        <GameLoader v-if="loading" />
+      </Transition>
+    </div>
   </main>
 </template>
 
@@ -113,10 +127,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
   image-rendering: pixelated;
 }
 
+.game__ui {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.loader-leave-active {
+  transition: opacity 0.3s steps(4);
+}
+
+.loader-leave-to {
+  opacity: 0;
+}
+
 .game__toasts {
   position: absolute;
   top: 68px;
-  right: 12px;
+  /* Правая колонка занята кнопками паузы и отладки. */
+  right: 76px;
   display: grid;
   gap: 8px;
   justify-items: end;
@@ -153,5 +182,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
   right: 12px;
   padding: 10px 12px;
   font-size: 9px;
+}
+
+/* Телефон: уведомления идут отдельной строкой под верхней панелью, по центру. */
+@media (width <= 600px) {
+  .game__toasts {
+    top: 116px;
+    right: 12px;
+    left: 12px;
+    justify-items: center;
+    max-width: none;
+  }
+
+  .game__hint-verb {
+    display: none;
+  }
+
+  /* В портрете низ экрана занят джойстиком и «A» — подсказка поднимается над ними. */
+  .game__ui--touch .game__hint {
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 148px);
+  }
+
+  .game__hint {
+    max-width: calc(100% - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 </style>

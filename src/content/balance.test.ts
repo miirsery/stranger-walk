@@ -24,10 +24,11 @@ const beforeCaptain = [...beforeKeeper, registry.boss('keeper').rewardCards, reg
 
 const winRateAgainst = (bossId: string, deck: string[]): number => {
   const boss = registry.boss(bossId);
+  const { player } = gameContent;
   return simulateBattles(
     registry.card,
-    { name: 'Странник', health: gameContent.player.heroHealth, deck },
-    { name: boss.name, health: boss.health, deck: boss.deck },
+    { name: 'Странник', health: player.heroHealth, deck, ...(player.power ? { power: player.power } : {}) },
+    { name: boss.name, health: boss.health, deck: boss.deck, ...(boss.power ? { power: boss.power } : {}) },
     GAMES,
     7,
   ).winRate;

@@ -1,4 +1,4 @@
-import type { CardDef, CardEffect, CardId, CardKeyword, EffectTargeting } from '../content/types';
+import type { CardDef, CardEffect, CardId, CardKeyword, EffectTargeting, HeroPowerDef } from '../content/types';
 import { effectTargeting } from '../content/types';
 import type { Rng } from '../util/rng';
 import { shuffle } from '../util/rng';
@@ -34,6 +34,9 @@ export interface SideState {
   board: UnitState[];
   /** Растущий урон за попытку взять карту из пустой колоды — гарантирует, что бой закончится. */
   fatigue: number;
+  /** Сила героя (если есть) и использована ли она в этот ход. */
+  power: HeroPowerDef | null;
+  powerUsed: boolean;
 }
 
 /** Последняя атака — чтобы интерфейс мог её анимировать. `seq` растёт с каждой атакой. */
@@ -44,7 +47,11 @@ export interface LastAttack {
   target: AttackTarget;
 }
 
+/** До первого хода игрок может заменить часть стартовой руки. */
+export type BattlePhase = 'mulligan' | 'play';
+
 export interface BattleState {
+  phase: BattlePhase;
   turn: number;
   active: Side;
   winner: Side | null;
@@ -75,6 +82,7 @@ export interface BattleParticipant {
   name: string;
   health: number;
   deck: readonly CardId[];
+  power?: HeroPowerDef;
 }
 
 export interface BattleConfig {
@@ -83,10 +91,15 @@ export interface BattleConfig {
   enemy: BattleParticipant;
   rng: Rng;
   rules?: Partial<BattleRules>;
+  /** Начинать бой с фазы замены стартовой руки. По умолчанию — сразу первый ход. */
+  mulligan?: boolean;
 }
 
 const sameTarget = (a: AttackTarget, b: AttackTarget): boolean =>
   a.type === 'hero' ? b.type === 'hero' : b.type === 'unit' && a.uid === b.uid;
+
+/** ИИ при замене стартовой руки сбрасывает карты не дешевле этой стоимости. */
+const MULLIGAN_AI_MIN_COST = 4;
 
 const ok: ActionResult = { ok: true };
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
@@ -100,6 +113,7 @@ export class CardBattle {
   readonly rules: BattleRules;
   private readonly state: BattleState;
   private readonly resolveCard: (cardId: CardId) => CardDef;
+  private readonly rng: Rng;
   private nextUid = 1;
 
   constructor(config: BattleConfig) {
@@ -113,8 +127,12 @@ export class CardBattle {
       hand: [],
       board: [],
       fatigue: 0,
+      power: participant.power ?? null,
+      powerUsed: false,
     });
+    this.rng = config.rng;
     this.state = {
+      phase: config.mulligan ? 'mulligan' : 'play',
       turn: 0,
       active: 'enemy',
       winner: null,
@@ -126,7 +144,29 @@ export class CardBattle {
       this.draw('player');
       this.draw('enemy');
     }
+    if (this.state.phase === 'play') this.startTurn('player');
+  }
+
+  get phase(): BattlePhase {
+    return this.state.phase;
+  }
+
+  /**
+   * Замена стартовой руки: выбранные карты уходят в колоду, вместо них берутся новые.
+   * Противник заменяет свои дорогие карты сам. После этого начинается первый ход игрока.
+   */
+  mulligan(handIndexes: readonly number[]): ActionResult {
+    if (this.state.winner) return fail('Бой уже окончен');
+    if (this.state.phase !== 'mulligan') return fail('Заменить карты можно только до первого хода');
+    this.replaceCards('player', handIndexes);
+    const enemyHand = this.state.sides.enemy.hand;
+    this.replaceCards(
+      'enemy',
+      enemyHand.flatMap((cardId, index) => (this.resolveCard(cardId).cost >= MULLIGAN_AI_MIN_COST ? [index] : [])),
+    );
+    this.state.phase = 'play';
     this.startTurn('player');
+    return ok;
   }
 
   get active(): Side {
@@ -167,17 +207,48 @@ export class CardBattle {
   /** Допустимые цели заклинания из руки; пустой список — цель не нужна или её нет. */
   validPlayTargets(side: Side, handIndex: number): AttackTarget[] {
     const cardId = this.state.sides[side].hand[handIndex];
-    if (cardId === undefined) return [];
-    const units = (owner: Side): AttackTarget[] =>
-      this.state.sides[owner].board.map((unit) => ({ type: 'unit', uid: unit.uid }));
-    switch (this.targetingOf(cardId)) {
-      case 'enemy':
-        return [{ type: 'hero' }, ...units(opponentOf(side))];
-      case 'ally':
-        return units(side);
-      case 'none':
-        return [];
+    return cardId === undefined ? [] : this.targetsFor(side, this.targetingOf(cardId));
+  }
+
+  // ---------- Сила героя ----------
+
+  /** Какую цель требует сила героя этой стороны. */
+  powerTargeting(side: Side): EffectTargeting {
+    const power = this.state.sides[side].power;
+    return power ? effectTargeting(power.effect) : 'none';
+  }
+
+  validPowerTargets(side: Side): AttackTarget[] {
+    return this.targetsFor(side, this.powerTargeting(side));
+  }
+
+  canUsePower(side: Side, target?: AttackTarget): ActionResult {
+    const guard = this.guardTurn(side);
+    if (!guard.ok) return guard;
+    const own = this.state.sides[side];
+    if (!own.power) return fail('У героя нет силы');
+    if (own.powerUsed) return fail('Сила героя уже использована в этот ход');
+    if (own.power.cost > own.mana) return fail('Не хватает маны');
+    if (this.powerTargeting(side) !== 'none') {
+      const targets = this.validPowerTargets(side);
+      if (targets.length === 0) return fail('Нет подходящей цели');
+      if (target && !targets.some((candidate) => sameTarget(candidate, target))) return fail('Нет такой цели');
     }
+    return ok;
+  }
+
+  usePower(side: Side, target?: AttackTarget): ActionResult {
+    const check = this.canUsePower(side, target);
+    if (!check.ok) return check;
+    if (this.powerTargeting(side) !== 'none' && !target) return fail('Нужно выбрать цель');
+    const own = this.state.sides[side];
+    const power = own.power as HeroPowerDef;
+    own.mana -= power.cost;
+    own.powerUsed = true;
+    this.log(`${own.hero.name}: сила «${power.name}»`);
+    this.applyEffect(side, power.effect, target);
+    this.checkWinner();
+    return ok;
   }
 
   /**
@@ -273,11 +344,44 @@ export class CardBattle {
     return ok;
   }
 
+  /** Сдача: победа присуждается противнику. */
+  concede(side: Side): ActionResult {
+    if (this.state.winner) return fail('Бой уже окончен');
+    this.state.winner = opponentOf(side);
+    this.log(`${this.state.sides[side].hero.name} сдаётся`);
+    return ok;
+  }
+
   endTurn(side: Side): ActionResult {
     const guard = this.guardTurn(side);
     if (!guard.ok) return guard;
     this.startTurn(opponentOf(side));
     return ok;
+  }
+
+  private targetsFor(side: Side, targeting: EffectTargeting): AttackTarget[] {
+    const units = (owner: Side): AttackTarget[] =>
+      this.state.sides[owner].board.map((unit) => ({ type: 'unit', uid: unit.uid }));
+    switch (targeting) {
+      case 'enemy':
+        return [{ type: 'hero' }, ...units(opponentOf(side))];
+      case 'ally':
+        return units(side);
+      case 'none':
+        return [];
+    }
+  }
+
+  /** Возвращает выбранные карты в колоду, тасует её и добирает столько же новых. */
+  private replaceCards(side: Side, handIndexes: readonly number[]): void {
+    const own = this.state.sides[side];
+    const chosen = [...new Set(handIndexes)].filter((index) => index >= 0 && index < own.hand.length);
+    if (chosen.length === 0) return;
+    const returned = chosen.map((index) => own.hand[index] as CardId);
+    own.hand = own.hand.filter((_, index) => !chosen.includes(index));
+    // Сначала добор, потом возврат: заменённая карта не может прийти обратно сразу же.
+    for (let i = 0; i < returned.length; i++) this.draw(side);
+    own.deck = shuffle([...own.deck, ...returned], this.rng);
   }
 
   private applyEffect(side: Side, effect: CardEffect, target?: AttackTarget): void {
@@ -335,6 +439,7 @@ export class CardBattle {
 
   private guardTurn(side: Side): ActionResult {
     if (this.state.winner) return fail('Бой уже окончен');
+    if (this.state.phase === 'mulligan') return fail('Сначала замени карты или оставь руку');
     if (this.state.active !== side) return fail('Сейчас не ваш ход');
     return ok;
   }
@@ -346,6 +451,7 @@ export class CardBattle {
     own.maxMana = Math.min(this.rules.manaCap, own.maxMana + 1);
     own.mana = own.maxMana;
     for (const unit of own.board) unit.canAttack = true;
+    own.powerUsed = false;
     this.draw(side);
     this.checkWinner();
   }

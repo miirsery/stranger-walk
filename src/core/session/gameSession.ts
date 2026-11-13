@@ -22,11 +22,17 @@ export interface DialogState {
   index: number;
 }
 
+/**
+ * Мини-игра начинается с вступления (правила и кнопка «Начать») — случайный запуск
+ * ни к чему не обязывает. После исхода остаётся на экране итога, пока игрок не выйдет.
+ */
+export type MinigamePhase = 'intro' | 'playing' | 'finished';
+
 /** Текущая «сцена» игры. Рендер и UI переключаются, глядя на `kind`. */
 export type Mode =
   | { kind: 'world' }
   | { kind: 'dialog'; dialog: DialogState }
-  | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame }
+  | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame; phase: MinigamePhase; wonBefore: boolean }
   | { kind: 'battle'; boss: BossDef; battle: CardBattle };
 
 export type SessionEvent =
@@ -37,6 +43,7 @@ export type SessionEvent =
   | { type: 'questUpdated'; quest: QuestDef }
   | { type: 'questCompleted'; quest: QuestDef }
   | { type: 'cardsGranted'; cardIds: CardId[] }
+  | { type: 'minigameStarted'; minigameId: string }
   | { type: 'minigameFinished'; minigameId: string; won: boolean }
   | { type: 'battleUpdated' }
   | { type: 'battleFinished'; bossId: string; won: boolean };
@@ -46,6 +53,8 @@ export interface SessionOptions {
 }
 
 const SYSTEM_SPEAKER = '';
+/** Сколько копий каждой карты выдаёт отладочная команда «все карты». */
+const CHEAT_COPIES = 2;
 /** Ограничение шага, чтобы после «подвисшей» вкладки персонаж не пролетал сквозь стены. */
 const MAX_STEP_MS = 50;
 
@@ -66,6 +75,7 @@ export class GameSession {
   private readonly defeatedBosses = new Set<string>();
   private readonly wonMinigames = new Set<string>();
   private lastPortalKey: string | null = null;
+  private portalsForcedOpen = false;
   private readonly rng: Rng;
 
   constructor(content: GameContent, options: SessionOptions = {}) {
@@ -127,15 +137,20 @@ export class GameSession {
     if (mode.kind === 'world') {
       this.world.update(dt, input);
       this.checkPortal();
-    } else if (mode.kind === 'minigame') {
+    } else if (mode.kind === 'minigame' && mode.phase === 'playing') {
       mode.game.update(dt, input);
-      if (mode.game.status !== 'playing') this.finishMinigame(mode.def, mode.game.status === 'won');
+      if (mode.game.status !== 'playing') this.finishMinigame(mode);
     }
   }
 
-  /** Кнопка действия: заговорить с NPC или пролистать диалог. */
+  /** Кнопка действия: заговорить с NPC, пролистать диалог, начать мини-игру или выйти с её итога. */
   interact(): void {
     const mode = this.currentMode;
+    if (mode.kind === 'minigame') {
+      if (mode.phase === 'intro') this.startMinigame();
+      else if (mode.phase === 'finished') this.quitMinigame();
+      return;
+    }
     if (mode.kind === 'dialog') {
       this.advanceDialog(mode.dialog);
       return;
@@ -161,6 +176,86 @@ export class GameSession {
     });
   }
 
+  // ---------- Мини-игры ----------
+
+  /** Из вступления — в игру. */
+  startMinigame(): void {
+    const mode = this.currentMode;
+    if (mode.kind !== 'minigame' || mode.phase !== 'intro') return;
+    mode.phase = 'playing';
+    this.events.emit({ type: 'minigameStarted', minigameId: mode.def.id });
+  }
+
+  /** Начать ту же мини-игру заново — с любого её экрана. */
+  restartMinigame(): void {
+    const mode = this.currentMode;
+    if (mode.kind !== 'minigame') return;
+    mode.game = createMinigame(mode.def, this.rng);
+    mode.phase = 'playing';
+    mode.wonBefore = this.wonMinigames.has(mode.def.id);
+    this.events.emit({ type: 'minigameStarted', minigameId: mode.def.id });
+  }
+
+  /** Выйти в мир с любого экрана мини-игры. Уже полученные награды и прогресс остаются. */
+  quitMinigame(): void {
+    if (this.currentMode.kind === 'minigame') this.setMode({ kind: 'world' });
+  }
+
+  hasWonMinigame(minigameId: string): boolean {
+    return this.wonMinigames.has(minigameId);
+  }
+
+  // ---------- Отладка ----------
+  // Команды для разработки и тестирования; интерфейс показывает их только в режиме отладки.
+
+  /** Засчитать победу в идущей мини-игре. */
+  cheatWinMinigame(): void {
+    const mode = this.currentMode;
+    if (mode.kind !== 'minigame' || mode.phase === 'finished') return;
+    mode.game.status = 'won';
+    this.finishMinigame(mode);
+  }
+
+  /** Засчитать победу в идущем бою (противник «сдаётся»). */
+  cheatWinBattle(): void {
+    this.battleAction((battle) => battle.concede('enemy'));
+  }
+
+  /** Выдать недостающие копии всех карт игры. */
+  cheatGrantAllCards(): void {
+    const missing: CardId[] = [];
+    for (const cardId of Object.keys(this.content.data.cards)) {
+      for (let count = this.cards.count(cardId); count < CHEAT_COPIES; count++) missing.push(cardId);
+    }
+    this.grantCards(missing);
+  }
+
+  /** Завершить все активные квесты с выдачей наград. */
+  cheatCompleteQuests(): void {
+    for (const quest of this.quests.completeActive()) {
+      this.events.emit({ type: 'questCompleted', quest });
+      this.grantCards(quest.rewardCards);
+    }
+  }
+
+  /** Открыть (или снова закрыть) все порталы независимо от условий. */
+  cheatSetPortalsOpen(open: boolean): void {
+    this.portalsForcedOpen = open;
+  }
+
+  get cheatPortalsOpen(): boolean {
+    return this.portalsForcedOpen;
+  }
+
+  /** Перенестись на уровень, как через портал. Работает только из мира. */
+  cheatTeleport(levelId: string): void {
+    if (this.currentMode.kind !== 'world') return;
+    this.world.loadLevel(levelId);
+    this.lastPortalKey = null;
+    this.events.emit({ type: 'levelChanged', levelId });
+    this.progress({ type: 'levelEntered', levelId });
+  }
+
   // ---------- Карточный бой ----------
 
   battlePlayCard(handIndex: number, target?: AttackTarget): ActionResult {
@@ -169,6 +264,15 @@ export class GameSession {
 
   battleAttack(attackerUid: number, target: AttackTarget): ActionResult {
     return this.battleAction((battle) => battle.attack('player', attackerUid, target));
+  }
+
+  /** Замена стартовой руки: индексы карт, которые игрок хочет сбросить (можно пустой список). */
+  battleMulligan(handIndexes: readonly number[]): ActionResult {
+    return this.battleAction((battle) => battle.mulligan(handIndexes));
+  }
+
+  battleUsePower(target?: AttackTarget): ActionResult {
+    return this.battleAction((battle) => battle.usePower('player', target));
   }
 
   /** Завершает ход игрока. Дальше ход противника по шагам ведёт `battleEnemyStep`. */
@@ -259,16 +363,24 @@ export class GameSession {
         break;
       case 'startMinigame': {
         const def = this.content.minigame(effect.minigameId);
-        this.setMode({ kind: 'minigame', def, game: createMinigame(def, this.rng) });
+        this.setMode({
+          kind: 'minigame',
+          def,
+          game: createMinigame(def, this.rng),
+          phase: 'intro',
+          wonBefore: this.wonMinigames.has(def.id),
+        });
         break;
       }
       case 'startBattle': {
         const boss = this.content.boss(effect.bossId);
+        const { player } = this.content.data;
         const battle = new CardBattle({
           resolveCard: this.content.card,
-          player: { name: 'Странник', health: this.content.data.player.heroHealth, deck: this.cards.deck },
-          enemy: { name: boss.name, health: boss.health, deck: boss.deck },
+          player: { name: 'Странник', health: player.heroHealth, deck: this.cards.deck, ...(player.power ? { power: player.power } : {}) },
+          enemy: { name: boss.name, health: boss.health, deck: boss.deck, ...(boss.power ? { power: boss.power } : {}) },
           rng: this.rng,
+          mulligan: true,
         });
         this.setMode({ kind: 'battle', boss, battle });
         this.events.emit({ type: 'battleUpdated' });
@@ -277,15 +389,17 @@ export class GameSession {
     }
   }
 
-  private finishMinigame(def: MinigameDef, won: boolean): void {
+  /** Фиксирует исход: награды и прогресс выдаются сразу, игрок остаётся на экране итога. */
+  private finishMinigame(mode: Extract<Mode, { kind: 'minigame' }>): void {
+    const { def } = mode;
+    const won = mode.game.status === 'won';
+    mode.phase = 'finished';
     this.events.emit({ type: 'minigameFinished', minigameId: def.id, won });
-    const lines = [won ? `Победа в мини-игре «${def.name}»!` : `«${def.name}»: не вышло. Попробуй ещё раз!`];
     if (won && !this.wonMinigames.has(def.id)) {
       this.wonMinigames.add(def.id);
       this.grantCards(def.rewardCards);
       this.progress({ type: 'minigameWon', minigameId: def.id });
     }
-    this.openDialog(SYSTEM_SPEAKER, lines, []);
   }
 
   private grantCards(cardIds: CardId[]): void {
@@ -312,7 +426,7 @@ export class GameSession {
     const key = `${this.world.level.id}:${portal.at.x}:${portal.at.y}`;
     if (key === this.lastPortalKey) return;
     this.lastPortalKey = key;
-    if (!this.check(portal.requires)) {
+    if (!this.portalsForcedOpen && !this.check(portal.requires)) {
       this.openDialog(SYSTEM_SPEAKER, [portal.lockedText ?? 'Проход пока закрыт.'], []);
       return;
     }

@@ -31,7 +31,15 @@ export const computeViewport = (width: number, height: number): { zoom: number; 
  * Запускает Phaser внутри переданного элемента и связывает его с сессией.
  * Единственное место, где Phaser встречается с остальным приложением.
  */
-export const createGame = (parent: HTMLElement, session: GameSession, input: InputHub): GameHandle => {
+/** Событие, которым сцена мира сообщает, что карта построена. */
+export const WORLD_READY_EVENT = 'world-ready';
+
+export const createGame = (
+  parent: HTMLElement,
+  session: GameSession,
+  input: InputHub,
+  onReady?: () => void,
+): GameHandle => {
   const context: RenderContext = { session, input, paused: false };
   const initial = computeViewport(parent.clientWidth, parent.clientHeight);
 
@@ -55,6 +63,11 @@ export const createGame = (parent: HTMLElement, session: GameSession, input: Inp
     },
     scene: [WorldScene, MinigameScene],
   });
+
+  // «Готово» — когда мир построен и первый кадр с ним уже на экране.
+  if (onReady) {
+    game.events.once(WORLD_READY_EVENT, () => game.events.once(Phaser.Core.Events.POST_RENDER, onReady));
+  }
 
   const resize = (): void => {
     const viewport = computeViewport(parent.clientWidth, parent.clientHeight);
