@@ -3,7 +3,17 @@ import type { ActionResult, AttackTarget } from '../battle/cardBattle';
 import { CardBattle } from '../battle/cardBattle';
 import { CardCollection } from '../cards/collection';
 import { ContentRegistry } from '../content/registry';
-import type { BossDef, CardId, Condition, Effect, GameContent, MinigameDef, QuestDef } from '../content/types';
+import type {
+  BossDef,
+  CardId,
+  Condition,
+  Effect,
+  GameContent,
+  MinigameDef,
+  Point,
+  QuestDef,
+  WorldObjectDef,
+} from '../content/types';
 import type { AnyMinigame } from '../minigames/minigame';
 import { createMinigame } from '../minigames/minigame';
 import type { ProgressEvent } from '../quests/questLog';
@@ -33,7 +43,16 @@ export type Mode =
   | { kind: 'world' }
   | { kind: 'dialog'; dialog: DialogState }
   | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame; phase: MinigamePhase; wonBefore: boolean }
-  | { kind: 'battle'; boss: BossDef; battle: CardBattle };
+  | { kind: 'battle'; boss: BossDef; battle: CardBattle }
+  /** Выбор одной карты из нескольких (сундук). */
+  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string };
+
+/** Подсказка о том, с чем сейчас можно взаимодействовать. */
+export interface InteractionPrompt {
+  verb: string;
+  name: string;
+  at: Point;
+}
 
 export type SessionEvent =
   | { type: 'modeChanged'; mode: Mode['kind'] }
@@ -76,6 +95,7 @@ export class GameSession {
   private readonly wonMinigames = new Set<string>();
   private lastPortalKey: string | null = null;
   private portalsForcedOpen = false;
+  private readonly openedChests = new Set<string>();
   private readonly rng: Rng;
 
   constructor(content: GameContent, options: SessionOptions = {}) {
@@ -103,6 +123,7 @@ export class GameSession {
     session.cards.restore(owned, save.cards.deck.filter((cardId) => has(content.cards, cardId)));
     for (const id of save.defeatedBosses) if (has(content.bosses, id)) session.defeatedBosses.add(id);
     for (const id of save.wonMinigames) if (has(content.minigames, id)) session.wonMinigames.add(id);
+    for (const key of save.openedChests) session.openedChests.add(key);
     return session;
   }
 
@@ -123,6 +144,7 @@ export class GameSession {
       },
       defeatedBosses: [...this.defeatedBosses],
       wonMinigames: [...this.wonMinigames],
+      openedChests: [...this.openedChests],
     };
   }
 
@@ -156,9 +178,13 @@ export class GameSession {
       return;
     }
     if (mode.kind !== 'world') return;
-    const placement = this.world.findInteractableNpc();
-    if (!placement) return;
-    const npc = this.content.npc(placement.npcId);
+    const target = this.world.findInteractable();
+    if (!target) return;
+    if (target.kind === 'object') {
+      this.useObject(target.object);
+      return;
+    }
+    const npc = this.content.npc(target.npc.npcId);
     const script = npc.scripts.find((candidate) => this.check(candidate.when));
     if (!script) return;
     this.pendingTalk = npc.id;
@@ -174,6 +200,40 @@ export class GameSession {
           return this.defeatedBosses.has(condition.bossId) === condition.value;
       }
     });
+  }
+
+  /** С чем игрок может взаимодействовать прямо сейчас (для подсказки и значка над целью). */
+  interactionPrompt(): InteractionPrompt | null {
+    if (this.currentMode.kind !== 'world') return null;
+    const target = this.world.findInteractable();
+    if (!target) return null;
+    if (target.kind === 'npc') {
+      return { verb: 'поговорить', name: this.content.npc(target.npc.npcId).name, at: target.npc.at };
+    }
+    const { object } = target;
+    if (object.type === 'sign') return { verb: 'прочитать', name: 'Табличка', at: object.at };
+    return this.isChestOpened(object.id) ? null : { verb: 'открыть', name: 'Сундук', at: object.at };
+  }
+
+  /** Открыт ли сундук на текущем уровне. */
+  isChestOpened(objectId: string): boolean {
+    return this.openedChests.has(this.chestKey(objectId));
+  }
+
+  /** Забрать одну из предложенных карт; сундук после этого пуст. */
+  chooseReward(index: number): void {
+    const mode = this.currentMode;
+    if (mode.kind !== 'reward') return;
+    const cardId = mode.options[index];
+    if (cardId === undefined) return;
+    this.openedChests.add(mode.chestKey);
+    this.setMode({ kind: 'world' });
+    this.grantCards([cardId]);
+  }
+
+  /** Закрыть выбор, ничего не взяв: сундук останется закрытым. */
+  declineReward(): void {
+    if (this.currentMode.kind === 'reward') this.setMode({ kind: 'world' });
   }
 
   // ---------- Мини-игры ----------
@@ -309,6 +369,19 @@ export class GameSession {
   }
 
   // ---------- Внутреннее ----------
+
+  private chestKey(objectId: string): string {
+    return `${this.world.level.id}:${objectId}`;
+  }
+
+  private useObject(object: WorldObjectDef): void {
+    if (object.type === 'sign') {
+      this.openDialog('Табличка', object.lines, []);
+      return;
+    }
+    if (this.isChestOpened(object.id)) return;
+    this.setMode({ kind: 'reward', title: 'Сундук', options: object.choices, chestKey: this.chestKey(object.id) });
+  }
 
   private battleAction(action: (battle: CardBattle) => ActionResult): ActionResult {
     const mode = this.currentMode;

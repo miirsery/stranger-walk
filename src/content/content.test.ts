@@ -21,4 +21,25 @@ describe('контент игры', () => {
     expect(errors.some((error) => error.includes('«ghost»'))).toBe(true);
     expect(errors.some((error) => error.includes('имеет длину 3'))).toBe(true);
   });
+
+  it('валидатор проверяет объекты уровней', () => {
+    const meadow = gameContent.levels.meadow;
+    if (!meadow) throw new Error('нет уровня meadow');
+    const errors = validateContent({
+      ...gameContent,
+      levels: {
+        ...gameContent.levels,
+        meadow: {
+          ...meadow,
+          objects: [
+            { id: 'a', type: 'chest', at: { x: 0, y: 0 }, choices: ['unicorn'] },
+            { id: 'a', type: 'sign', at: meadow.spawn, lines: [] },
+          ],
+        },
+      },
+    });
+    for (const part of ['стоит в стене', '«unicorn»', 'минимум из двух', 'повтор id', 'точке появления', 'пустая табличка']) {
+      expect(errors.some((error) => error.includes(part))).toBe(true);
+    }
+  });
 });

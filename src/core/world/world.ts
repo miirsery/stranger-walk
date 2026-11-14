@@ -1,5 +1,5 @@
 import type { ContentRegistry } from '../content/registry';
-import type { LevelDef, NpcPlacement, Point, PortalDef } from '../content/types';
+import type { LevelDef, NpcPlacement, Point, PortalDef, WorldObjectDef } from '../content/types';
 import { pixelToTile, TILE_SIZE, tileCenter, TileMap } from './tileMap';
 
 export type Facing = 'up' | 'down' | 'left' | 'right';
@@ -11,6 +11,9 @@ export interface MoveInput {
   /** -1..1 */
   y: number;
 }
+
+/** То, с чем игрок может взаимодействовать: персонаж или объект уровня. */
+export type Interactable = { kind: 'npc'; npc: NpcPlacement } | { kind: 'object'; object: WorldObjectDef };
 
 export interface PlayerState {
   /** Центр персонажа в пикселях мира. */
@@ -86,6 +89,29 @@ export class WorldState {
     return this.level.npcs.find((npc) => npc.at.x === tx && npc.at.y === ty);
   }
 
+  objectAt(tx: number, ty: number): WorldObjectDef | undefined {
+    return this.level.objects?.find((object) => object.at.x === tx && object.at.y === ty);
+  }
+
+  /** Ближайшее в радиусе взаимодействия: NPC или объект. */
+  findInteractable(): Interactable | undefined {
+    const candidates: { item: Interactable; at: Point }[] = [
+      ...this.level.npcs.map((npc) => ({ item: { kind: 'npc', npc } as const, at: npc.at })),
+      ...(this.level.objects ?? []).map((object) => ({ item: { kind: 'object', object } as const, at: object.at })),
+    ];
+    let best: Interactable | undefined;
+    let bestDistance = INTERACT_RANGE;
+    for (const { item, at } of candidates) {
+      const center = tileCenter(at);
+      const distance = Math.hypot(center.x - this.player.x, center.y - this.player.y);
+      if (distance <= bestDistance) {
+        best = item;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
   /** Ближайший NPC в радиусе взаимодействия. */
   findInteractableNpc(): NpcPlacement | undefined {
     let best: NpcPlacement | undefined;
@@ -113,7 +139,7 @@ export class WorldState {
     const bottom = pixelToTile(y + PLAYER_HALF - 0.001);
     for (let ty = top; ty <= bottom; ty++) {
       for (let tx = left; tx <= right; tx++) {
-        if (this.map.isSolid(tx, ty) || this.npcAt(tx, ty)) return true;
+        if (this.map.isSolid(tx, ty) || this.npcAt(tx, ty) || this.objectAt(tx, ty)) return true;
       }
     }
     return false;

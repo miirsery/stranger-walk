@@ -339,4 +339,66 @@ describe('GameSession', () => {
       expect(session.check([{ type: 'bossDefeated', bossId: 'keeper', value: true }])).toBe(true);
     });
   });
+
+  describe('таблички и сундуки', () => {
+    it('табличка показывает текст и не влияет на квесты', () => {
+      const session = new GameSession(gameContent);
+      place(session, { x: 2, y: 8 });
+      expect(session.interactionPrompt()).toMatchObject({ verb: 'прочитать', name: 'Табличка' });
+      session.interact();
+      const mode = session.mode;
+      expect(mode.kind === 'dialog' && mode.dialog.speaker).toBe('Табличка');
+      skipDialog(session);
+      expect(session.mode.kind).toBe('world');
+      expect(session.quests.list()).toEqual([]);
+    });
+
+    it('сундук предлагает выбор, выдаёт одну карту и больше не открывается', () => {
+      const session = new GameSession(gameContent);
+      const events = record(session);
+      place(session, { x: 25, y: 3 });
+      expect(session.interactionPrompt()).toMatchObject({ verb: 'открыть', name: 'Сундук', at: { x: 25, y: 2 } });
+      session.interact();
+      const mode = session.mode;
+      if (mode.kind !== 'reward') throw new Error(`ожидался выбор награды, а не ${mode.kind}`);
+      expect(mode.options).toEqual(['fox', 'reaper', 'feast']);
+
+      session.chooseReward(99);
+      expect(session.mode.kind).toBe('reward');
+      session.chooseReward(2);
+      expect(session.mode.kind).toBe('world');
+      expect(session.cards.count('feast')).toBe(1);
+      expect(session.cards.count('reaper')).toBe(2);
+      expect(events).toContainEqual({ type: 'cardsGranted', cardIds: ['feast'] });
+
+      expect(session.isChestOpened('pond_chest')).toBe(true);
+      expect(session.interactionPrompt()).toBeNull();
+      session.interact();
+      expect(session.mode.kind).toBe('world');
+    });
+
+    it('от выбора можно отказаться — сундук останется закрытым', () => {
+      const session = new GameSession(gameContent);
+      place(session, { x: 25, y: 3 });
+      session.interact();
+      session.declineReward();
+      expect(session.mode.kind).toBe('world');
+      expect(session.isChestOpened('pond_chest')).toBe(false);
+      expect(session.cards.total).toBe(8);
+    });
+
+    it('открытые сундуки сохраняются, причём отдельно для каждого уровня', () => {
+      const session = new GameSession(gameContent);
+      place(session, { x: 25, y: 3 });
+      session.interact();
+      session.chooseReward(0);
+      const save = session.serialize();
+      expect(save.openedChests).toEqual(['meadow:pond_chest']);
+
+      const restored = GameSession.restore(gameContent, save);
+      expect(restored.isChestOpened('pond_chest')).toBe(true);
+      restored.cheatTeleport('submarine');
+      expect(restored.isChestOpened('stern_chest')).toBe(false);
+    });
+  });
 });

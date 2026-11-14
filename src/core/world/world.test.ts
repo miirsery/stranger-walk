@@ -60,6 +60,26 @@ describe('WorldState', () => {
     expect(world.findInteractableNpc()?.npcId).toBe('elder');
   });
 
+  it('объекты уровня непроходимы и доступны для взаимодействия вблизи', () => {
+    const world = createWorld();
+    expect(world.objectAt(2, 7)?.id).toBe('welcome_sign');
+    const above = tileCenter({ x: 2, y: 5 });
+    world.player.x = above.x;
+    world.player.y = above.y;
+    run(world, 3000, 0, 1);
+    expect(world.playerTile).toEqual({ x: 2, y: 6 });
+    const target = world.findInteractable();
+    expect(target?.kind === 'object' && target.object.id).toBe('welcome_sign');
+  });
+
+  it('из NPC и объекта выбирается ближайший', () => {
+    const world = createWorld();
+    const nearElder = tileCenter({ x: 5, y: 8 });
+    world.player.x = nearElder.x;
+    world.player.y = nearElder.y;
+    expect(world.findInteractable()?.kind).toBe('npc');
+  });
+
   it('находит портал под игроком и загружает другой уровень', () => {
     const world = createWorld();
     const portal = tileCenter({ x: 27, y: 8 });

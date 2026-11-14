@@ -93,6 +93,15 @@ export interface PortalDef {
   lockedText?: string;
 }
 
+/**
+ * Объекты на уровне, с которыми можно взаимодействовать. Как и NPC, они непроходимы.
+ * Табличка показывает текст; сундук один раз предлагает выбрать одну карту из нескольких.
+ */
+export type WorldObjectDef = { id: string; at: Point } & (
+  | { type: 'sign'; lines: string[] }
+  | { type: 'chest'; choices: CardId[] }
+);
+
 export interface LevelDef {
   id: LevelId;
   name: string;
@@ -102,6 +111,7 @@ export interface LevelDef {
   spawn: Point;
   npcs: NpcPlacement[];
   portals: PortalDef[];
+  objects?: WorldObjectDef[];
 }
 
 // ---------- Квесты ----------

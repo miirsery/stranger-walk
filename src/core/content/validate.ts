@@ -113,6 +113,23 @@ export const validateContent = (content: GameContent): string[] => {
       }
       checkConditions(portal.requires, where);
     }
+    const objectIds = new Set<string>();
+    for (const object of level.objects ?? []) {
+      const at = `объект ${object.id}`;
+      if (objectIds.has(object.id)) errors.push(`${where}: ${at} — повтор id`);
+      objectIds.add(object.id);
+      if (!walkable(level, setting, object.at)) errors.push(`${where}: ${at} стоит в стене`);
+      const samePlace = (point: Point): boolean => point.x === object.at.x && point.y === object.at.y;
+      if (level.npcs.some((npc) => samePlace(npc.at)) || level.portals.some((portal) => samePlace(portal.at))) {
+        errors.push(`${where}: ${at} стоит на NPC или портале`);
+      }
+      if (samePlace(level.spawn)) errors.push(`${where}: ${at} стоит на точке появления`);
+      if (object.type === 'sign' && object.lines.length === 0) errors.push(`${where}: ${at} — пустая табличка`);
+      if (object.type === 'chest') {
+        needCards(object.choices, `${where}, ${at}`);
+        if (object.choices.length < 2) errors.push(`${where}: ${at} — в сундуке нужен выбор минимум из двух карт`);
+      }
+    }
   }
 
   for (const npc of Object.values(content.npcs)) {

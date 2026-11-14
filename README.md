@@ -72,7 +72,7 @@ docker-compose.yml   backend + PostgreSQL
 Всё в `src/content/`, типы — в `src/core/content/types.ts`:
 
 - **Карта** — строка в `cards.ts`: существо (`unit`) или заклинание (`spell`) с эффектом из набора `CardEffect`.
-- **Уровень** — ASCII-карта в `levels.ts`: символы — тайлы сеттинга, плюс NPC и порталы.
+- **Уровень** — ASCII-карта в `levels.ts`: символы — тайлы сеттинга, плюс NPC, порталы и объекты (таблички, сундуки с выбором карты).
 - **Сеттинг** (поля, подлодка, замок, космос…) — набор тайлов и трек в `settings.ts`.
 - **NPC и диалоги** — `npcs.ts`: сценарии с условиями (`when`) и эффектами (`startQuest`, `startMinigame`, `startBattle`, `grantCards`).
 - **Квест** — `quests.ts`: цели (`talkTo`, `winMinigame`, `enterLevel`, `defeatBoss`) и карты в награду.

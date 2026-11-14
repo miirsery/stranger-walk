@@ -13,6 +13,7 @@ import JournalOverlay from '../components/JournalOverlay.vue';
 import MemoryBoard from '../components/MemoryBoard.vue';
 import MinigameHud from '../components/MinigameHud.vue';
 import PauseMenu from '../components/PauseMenu.vue';
+import RewardOverlay from '../components/RewardOverlay.vue';
 import TouchControls from '../components/TouchControls.vue';
 import { useGame } from '../composables/useGame';
 import { useSettingsStore } from '../stores/settings';
@@ -22,7 +23,7 @@ const route = useRoute();
 const router = useRouter();
 const game = useGame(container, { storage: localSaveStorage, continueGame: route.query.continue === '1' });
 const debug = isDebugEnabled();
-const { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, interactTarget } = game;
+const { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, interactTarget, rewardOptions } = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -63,7 +64,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
     <!-- Весь интерфейс поверх канваса: масштабируется настройкой «Размер интерфейса». -->
     <div class="game__ui ui-scale" :class="{ 'game__ui--touch': showTouch }">
       <GameHud
-        v-if="modeKind === 'world' || modeKind === 'dialog'"
+        v-if="modeKind === 'world' || modeKind === 'dialog' || modeKind === 'reward'"
         :level-name="levelName"
         :quests="quests"
         :card-total="cardTotal"
@@ -76,9 +77,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       <BattleOverlay v-if="battle" :session="session" :state="battle" />
       <TouchControls v-if="showTouch" :input="input" />
       <p v-if="interactTarget && !paused && !panel" class="pixel-panel game__hint">
-        <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> <span class="game__hint-verb">поговорить:</span> {{ interactTarget }}
+        <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> <span class="game__hint-verb">{{ interactTarget.verb }}:</span> {{ interactTarget.name }}
       </p>
       <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
+      <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" />
 
       <ul class="game__toasts" aria-live="polite">
         <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>

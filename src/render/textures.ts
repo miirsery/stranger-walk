@@ -29,21 +29,36 @@ const PATTERNS: Record<TileDef['pattern'], readonly Rect[]> = {
   door: [[2, 2, 12, 1], [2, 13, 12, 1], [2, 2, 1, 12], [13, 2, 1, 12], [6, 6, 4, 4]],
 };
 
+/** Второй кадр для «живых» узоров: вода течёт, звёзды мерцают, огни и люки мигают. */
+const ANIMATED_PATTERNS: Partial<Record<TileDef['pattern'], readonly Rect[]>> = {
+  waves: [[3, 3, 4, 1], [11, 5, 4, 1], [6, 10, 4, 1], [13, 12, 3, 1], [0, 12, 1, 1]],
+  stars: [[5, 3, 1, 1], [12, 7, 1, 1], [2, 10, 1, 1], [9, 13, 1, 1], [14, 1, 1, 1]],
+  door: [[2, 2, 12, 1], [2, 13, 12, 1], [2, 2, 1, 12], [13, 2, 1, 12], [7, 7, 2, 2]],
+};
+
+export const isAnimatedTile = (tile: TileDef): boolean => tile.pattern in ANIMATED_PATTERNS;
+
 export const tilesetKey = (settingId: string): string => `tiles-${settingId}`;
 
-/** Тайлсет сеттинга: тайлы в ряд, в порядке `Object.keys(setting.tiles)`. */
+/**
+ * Тайлсет сеттинга: тайлы в ряд, в порядке `Object.keys(setting.tiles)`, затем тот же ряд
+ * ещё раз — вторым кадром анимации. Индекс второго кадра = индекс тайла + число тайлов.
+ */
 export const ensureTilesetTexture = (scene: Phaser.Scene, setting: SettingDef): string => {
   const key = tilesetKey(setting.id);
   if (scene.textures.exists(key)) return key;
   const tiles = Object.values(setting.tiles);
-  const texture = scene.textures.createCanvas(key, tiles.length * TILE_SIZE, TILE_SIZE);
+  const texture = scene.textures.createCanvas(key, tiles.length * 2 * TILE_SIZE, TILE_SIZE);
   if (!texture) throw new Error(`Не удалось создать текстуру ${key}`);
   const ctx = texture.getContext();
-  tiles.forEach((tile, index) => {
-    const ox = index * TILE_SIZE;
-    fill(ctx, ox, css(tile.color), [[0, 0, TILE_SIZE, TILE_SIZE]]);
-    fill(ctx, ox, css(tile.accent), PATTERNS[tile.pattern]);
-  });
+  for (const frame of [0, 1] as const) {
+    tiles.forEach((tile, index) => {
+      const ox = (frame * tiles.length + index) * TILE_SIZE;
+      const pattern = (frame === 1 ? ANIMATED_PATTERNS[tile.pattern] : undefined) ?? PATTERNS[tile.pattern];
+      fill(ctx, ox, css(tile.color), [[0, 0, TILE_SIZE, TILE_SIZE]]);
+      fill(ctx, ox, css(tile.accent), pattern);
+    });
+  }
   texture.refresh();
   return key;
 };

@@ -40,8 +40,10 @@ export interface GameBridge {
   /** Открыть панель или закрыть текущую (null). Панели доступны только в мире. */
   setPanel: (value: GamePanel | null) => void;
   refresh: () => void;
-  /** Имя NPC, с которым сейчас можно заговорить, или null. */
-  interactTarget: Ref<string | null>;
+  /** С чем сейчас можно взаимодействовать (персонаж, табличка, сундук), или null. */
+  interactTarget: Ref<{ verb: string; name: string } | null>;
+  /** Карты, из которых предлагается выбрать одну (сундук), или null. */
+  rewardOptions: ShallowRef<{ title: string; options: string[] } | null>;
   /** Записать прогресс прямо сейчас (помимо автосохранения). */
   saveNow: () => void;
 }
@@ -83,7 +85,8 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
   const toasts = ref<Toast[]>([]);
   const paused = ref(false);
   const panel = ref<GamePanel | null>(null);
-  const interactTarget = ref<string | null>(null);
+  const interactTarget = ref<{ verb: string; name: string } | null>(null);
+  const rewardOptions = shallowRef<{ title: string; options: string[] } | null>(null);
 
   let handle: GameHandle | null = null;
   let nextToastId = 1;
@@ -108,6 +111,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     levelName.value = session.world.level.name;
     dialog.value = mode.kind === 'dialog' ? { ...mode.dialog } : null;
     battle.value = mode.kind === 'battle' ? mode.battle.snapshot() : null;
+    rewardOptions.value = mode.kind === 'reward' ? { title: mode.title, options: [...mode.options] } : null;
     quests.value = session.quests.list();
     cardTotal.value = session.cards.total;
     deckSize.value = session.cards.deck.length;
@@ -119,9 +123,11 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
 
   let hintFrame = 0;
   const watchInteraction = (): void => {
-    const npc = session.mode.kind === 'world' ? session.world.findInteractableNpc() : undefined;
-    const name = npc ? session.content.npc(npc.npcId).name : null;
-    if (name !== interactTarget.value) interactTarget.value = name;
+    const prompt = session.interactionPrompt();
+    const current = interactTarget.value;
+    if (prompt?.verb !== current?.verb || prompt?.name !== current?.name) {
+      interactTarget.value = prompt ? { verb: prompt.verb, name: prompt.name } : null;
+    }
     hintFrame = requestAnimationFrame(watchInteraction);
   };
 
@@ -199,5 +205,5 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, setPaused, setPanel, refresh, interactTarget, saveNow };
+  return { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, setPaused, setPanel, refresh, interactTarget, rewardOptions, saveNow };
 };
