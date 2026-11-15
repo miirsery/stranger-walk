@@ -45,7 +45,7 @@ export type Mode =
   | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame; phase: MinigamePhase; wonBefore: boolean }
   | { kind: 'battle'; boss: BossDef; battle: CardBattle }
   /** Выбор одной карты из нескольких (сундук). */
-  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string };
+  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; then?: () => void };
 
 /** Подсказка о том, с чем сейчас можно взаимодействовать. */
 export interface InteractionPrompt {
@@ -96,6 +96,8 @@ export class GameSession {
   private lastPortalKey: string | null = null;
   private portalsForcedOpen = false;
   private readonly openedChests = new Set<string>();
+  /** Карты на выбор за только что выигранную мини-игру: предлагаются при выходе с экрана итога. */
+  private pendingMinigameChoices: CardId[] | null = null;
   private readonly rng: Rng;
 
   constructor(content: GameContent, options: SessionOptions = {}) {
@@ -226,14 +228,16 @@ export class GameSession {
     if (mode.kind !== 'reward') return;
     const cardId = mode.options[index];
     if (cardId === undefined) return;
-    this.openedChests.add(mode.chestKey);
+    if (mode.chestKey) this.openedChests.add(mode.chestKey);
     this.setMode({ kind: 'world' });
     this.grantCards([cardId]);
+    mode.then?.();
   }
 
-  /** Закрыть выбор, ничего не взяв: сундук останется закрытым. */
+  /** Закрыть выбор, ничего не взяв: сундук останется закрытым. Награду за победу отклонить нельзя. */
   declineReward(): void {
-    if (this.currentMode.kind === 'reward') this.setMode({ kind: 'world' });
+    const mode = this.currentMode;
+    if (mode.kind === 'reward' && mode.chestKey) this.setMode({ kind: 'world' });
   }
 
   // ---------- Мини-игры ----------
@@ -258,7 +262,11 @@ export class GameSession {
 
   /** Выйти в мир с любого экрана мини-игры. Уже полученные награды и прогресс остаются. */
   quitMinigame(): void {
-    if (this.currentMode.kind === 'minigame') this.setMode({ kind: 'world' });
+    if (this.currentMode.kind !== 'minigame') return;
+    const choices = this.pendingMinigameChoices;
+    this.pendingMinigameChoices = null;
+    if (choices) this.setMode({ kind: 'reward', title: 'Награда за победу', options: choices, chestKey: null });
+    else this.setMode({ kind: 'world' });
   }
 
   hasWonMinigame(minigameId: string): boolean {
@@ -348,7 +356,7 @@ export class GameSession {
     const mode = this.currentMode;
     if (mode.kind !== 'battle' || mode.battle.winner || mode.battle.active !== 'enemy') return false;
     this.battleAction((battle) => {
-      performAiStep(battle, 'enemy');
+      performAiStep(battle, 'enemy', mode.boss.ai ?? 'basic');
       return { ok: true };
     });
     return mode.battle.winner === null && mode.battle.active === 'enemy';
@@ -364,6 +372,17 @@ export class GameSession {
       this.defeatedBosses.add(boss.id);
       this.grantCards(boss.rewardCards);
       this.progress({ type: 'bossDefeated', bossId: boss.id });
+      const choices = boss.rewardChoices ?? [];
+      if (choices.length > 0) {
+        this.setMode({
+          kind: 'reward',
+          title: 'Награда за победу',
+          options: choices,
+          chestKey: null,
+          then: () => this.openDialog(boss.name, boss.winLines, []),
+        });
+        return;
+      }
     }
     this.openDialog(boss.name, won ? boss.winLines : boss.loseLines, []);
   }
@@ -471,6 +490,7 @@ export class GameSession {
     if (won && !this.wonMinigames.has(def.id)) {
       this.wonMinigames.add(def.id);
       this.grantCards(def.rewardCards);
+      if (def.rewardChoices?.length) this.pendingMinigameChoices = [...def.rewardChoices];
       this.progress({ type: 'minigameWon', minigameId: def.id });
     }
   }

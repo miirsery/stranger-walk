@@ -12,7 +12,12 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 
-const KEYWORD_LABELS: Record<CardKeyword, string> = { guard: 'Защитник', charge: 'Рывок' };
+const KEYWORD_LABELS: Record<CardKeyword, string> = {
+  guard: 'Защитник',
+  charge: 'Рывок',
+  poison: 'Яд',
+  shield: 'Щит',
+};
 
 const tintCss = computed(() => `#${props.tint.toString(16).padStart(6, '0')}`);
 const unit = computed(() => (props.card.type === 'unit' ? props.card : null));
@@ -30,7 +35,7 @@ const buffed = computed(() => unit.value !== null && (health.value > unit.value.
     <span v-if="unit && unit.keywords.length" class="card__keywords">
       {{ unit.keywords.map((keyword) => KEYWORD_LABELS[keyword]).join(' · ') }}
     </span>
-    <span v-else-if="unit?.onPlay || unit?.onDeath" class="card__keywords">Эффект</span>
+    <span v-else-if="unit?.onPlay || unit?.onDeath || unit?.aura" class="card__keywords">Эффект</span>
     <span v-if="unit" class="card__stats" :class="{ 'card__stats--buffed': buffed }">
       <span class="card__attack" aria-label="Атака">{{ attack }}</span>
       <!-- key по здоровью перезапускает анимацию удара при каждом изменении -->

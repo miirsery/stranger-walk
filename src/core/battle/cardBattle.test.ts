@@ -13,10 +13,12 @@ const unit = (
   keywords: CardKeyword[] = [],
   onPlay?: CardEffect,
   onDeath?: CardEffect,
+  aura?: { attack: number },
 ): CardDef => ({
   id, type: 'unit', name: id, cost, attack, health, keywords, rarity: 'common', setting: 'test', text: '',
   ...(onPlay ? { onPlay } : {}),
   ...(onDeath ? { onDeath } : {}),
+  ...(aura ? { aura } : {}),
 });
 
 const spell = (id: string, cost: number, effect: CardEffect): CardDef => ({
@@ -37,6 +39,9 @@ const defs: Record<string, CardDef> = {
   wall: unit('wall', 1, 0, 5, ['guard']),
   rusher: unit('rusher', 1, 3, 1, ['charge']),
   giant: unit('giant', 5, 6, 6),
+  herald: unit('herald', 1, 1, 1, [], undefined, undefined, { attack: 1 }),
+  toxic: unit('toxic', 1, 1, 1, ['charge', 'poison']),
+  aegis: unit('aegis', 1, 0, 3, ['shield']),
 };
 
 const resolveCard = (id: string): CardDef => {
@@ -305,6 +310,57 @@ describe('заклинания с целью и эффекты гибели', ()
     expect(state.sides.player.board[0]?.health).toBe(1);
   });
 
+  it('яд убивает любое существо, которое ранил', () => {
+    const { battle, enemyUid } = withEnemyUnit('toxic', 'wall');
+    battle.playCard('player', 0);
+    const attacker = battle.snapshot().sides.player.board[0]?.uid ?? -1;
+    battle.attack('player', attacker, { type: 'unit', uid: enemyUid });
+    // «wall» (0/5) погибает от 1 урона яда.
+    expect(battle.snapshot().sides.enemy.board).toHaveLength(0);
+  });
+
+  it('аура даёт бонус к атаке другим существам, но не владельцу', () => {
+    const battle = createBattle(many('herald', 10), many('grunt', 10));
+    battle.playCard('player', 0);
+    expect(battle.snapshot().sides.player.board[0]?.attack).toBe(1);
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    battle.playCard('player', 0);
+    const board = battle.snapshot().sides.player.board;
+    expect(board.map((unit) => unit.attack)).toEqual([2, 2]);
+    // Пересчёт при смене хода не накапливает бонус повторно.
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    expect(battle.snapshot().sides.player.board.map((unit) => unit.attack)).toEqual([2, 2]);
+  });
+
+  it('клон боя независим от оригинала', () => {
+    const battle = createBattle(many('grunt', 10), many('grunt', 10));
+    const copy = battle.clone();
+    copy.playCard('player', 0);
+    expect(copy.snapshot().sides.player.board).toHaveLength(1);
+    expect(battle.snapshot().sides.player.board).toHaveLength(0);
+  });
+
+  it('умный ИИ доводит бой до конца и не нарушает правил', () => {
+    const deck = ['grunt', 'wall', 'rusher', 'giant', 'dart', 'bless', 'herald', 'toxic', 'aegis', 'quake'];
+    const battle = createBattle(deck, deck);
+    for (let turn = 0; turn < 200 && !battle.winner; turn++) playAiTurn(battle, battle.active, 'smart');
+    expect(battle.winner).not.toBeNull();
+  });
+
+  it('щит гасит первый удар и пропадает', () => {
+    const { battle, enemyUid } = withEnemyUnit('rusher', 'aegis');
+    battle.playCard('player', 0);
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    const attacker = battle.snapshot().sides.player.board[0]?.uid ?? -1;
+    battle.attack('player', attacker, { type: 'unit', uid: enemyUid });
+    const target = battle.snapshot().sides.enemy.board[0];
+    expect(target?.health).toBe(3);
+    expect(target?.keywords).not.toContain('shield');
+  });
+
   it('запоминает последнюю атаку для анимации', () => {
     const battle = createBattle(many('rusher', 10), many('grunt', 10));
     expect(battle.snapshot().lastAttack).toBeNull();
@@ -312,6 +368,19 @@ describe('заклинания с целью и эффекты гибели', ()
     const uid = battle.snapshot().sides.player.board[0]?.uid ?? -1;
     battle.attack('player', uid, { type: 'hero' });
     expect(battle.snapshot().lastAttack).toEqual({ seq: 1, side: 'player', attackerUid: uid, target: { type: 'hero' } });
+  });
+
+  it('запоминает последнее заклинание с целью для анимации полёта', () => {
+    const battle = createBattle(['dart', ...many('grunt', 9)], many('grunt', 10));
+    expect(battle.snapshot().lastCast).toBeNull();
+    battle.playCard('player', 0, { type: 'hero' });
+    expect(battle.snapshot().lastCast).toEqual({ seq: 1, side: 'player', target: { type: 'hero' } });
+  });
+
+  it('заклинание без цели не трогает lastCast', () => {
+    const battle = createBattle(['quake', ...many('grunt', 9)], many('grunt', 10));
+    battle.playCard('player', 0);
+    expect(battle.snapshot().lastCast).toBeNull();
   });
 
   it('ИИ выбирает цель: убивает существо, если может, иначе бьёт героя', () => {

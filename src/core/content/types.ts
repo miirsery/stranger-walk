@@ -141,8 +141,11 @@ export interface QuestDef {
 
 export type CardRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
-/** guard — враг обязан атаковать это существо первым; charge — атакует в ход розыгрыша. */
-export type CardKeyword = 'guard' | 'charge';
+/**
+ * guard — враг обязан атаковать это существо первым; charge — атакует в ход розыгрыша;
+ * poison — убивает любое существо, которому нанёс урон; shield — гасит первый полученный удар.
+ */
+export type CardKeyword = 'guard' | 'charge' | 'poison' | 'shield';
 
 /**
  * Эффекты карт. Большинство срабатывает без выбора цели; `damageTarget` и `buffTarget`
@@ -189,6 +192,8 @@ export interface UnitCardDef extends CardBase {
   onPlay?: CardEffect;
   /** Необязательный эффект в момент гибели существа (без выбора цели). */
   onDeath?: CardEffect;
+  /** Аура: пока существо на столе, остальные существа его стороны получают бонус к атаке. */
+  aura?: { attack: number };
 }
 
 /** Заклинание: срабатывает один раз и уходит. */
@@ -213,7 +218,15 @@ export interface DeckRules {
   maxCopies: number;
 }
 
-export interface BossDef {
+/** Дополнительная награда на выбор: игрок берёт одну карту из списка (после фиксированных наград). */
+export interface ChoiceReward {
+  rewardChoices?: CardId[];
+}
+
+/** basic — жадный выбор хода; smart — перебирает варианты хода и оценивает итог. */
+export type AiLevel = 'basic' | 'smart';
+
+export interface BossDef extends ChoiceReward {
   id: BossId;
   name: string;
   title: string;
@@ -221,6 +234,7 @@ export interface BossDef {
   health: number;
   deck: CardId[];
   power?: HeroPowerDef;
+  ai?: AiLevel;
   music: TrackId;
   rewardCards: CardId[];
   winLines: string[];
@@ -229,7 +243,7 @@ export interface BossDef {
 
 // ---------- Мини-игры ----------
 
-export interface CatchMinigameDef {
+export interface CatchMinigameDef extends ChoiceReward {
   id: MinigameId;
   type: 'catch';
   name: string;
@@ -247,7 +261,7 @@ export interface CatchMinigameDef {
 }
 
 /** «Найди пару»: на поле по две копии каждой карты из `cards`. */
-export interface MemoryMinigameDef {
+export interface MemoryMinigameDef extends ChoiceReward {
   id: MinigameId;
   type: 'memory';
   name: string;

@@ -12,8 +12,10 @@ const unit = (
   keywords: CardKeyword[] = [],
   onPlay?: CardEffect,
   onDeath?: CardEffect,
+  aura?: { attack: number },
 ): CardDef => ({
   id, type: 'unit', name, setting, cost, attack, health, rarity, text, keywords,
+  ...(aura ? { aura } : {}),
   ...(onPlay ? { onPlay } : {}),
   ...(onDeath ? { onDeath } : {}),
 });
@@ -36,6 +38,7 @@ const list: CardDef[] = [
   unit('reaper', 'Жнец', 'fields', 3, 3, 3, 'common', 'Надёжный работник поля.'),
   unit('bull', 'Бык', 'fields', 4, 4, 5, 'rare', 'Лучше не стоять у него на пути.'),
   spell('feast', 'Пир урожая', 'fields', 2, 'common', 'Лечит героя на 4.', { type: 'healHero', amount: 4 }),
+  unit('viper', 'Гадюка', 'fields', 2, 1, 2, 'rare', 'Яд: убивает любое существо, которое ранит.', ['poison']),
   // Подводная лодка
   unit('crab', 'Краб-механик', 'submarine', 2, 2, 3, 'common', 'При выходе: лечит героя на 2.', [], { type: 'healHero', amount: 2 }),
   unit('torpedo', 'Торпеда', 'submarine', 3, 4, 1, 'rare', 'Рывок: атакует сразу.', ['charge']),
@@ -44,6 +47,7 @@ const list: CardDef[] = [
   unit('mine', 'Морская мина', 'submarine', 3, 0, 3, 'rare', 'Защитник. При гибели: 1 урон всем существам врага.', ['guard'], undefined, { type: 'damageAllEnemies', amount: 1 }),
   spell('harpoon', 'Гарпун', 'submarine', 2, 'common', '3 урона выбранной цели.', { type: 'damageTarget', amount: 3 }),
   spell('depth_charge', 'Глубинная бомба', 'submarine', 3, 'rare', '2 урона всем существам врага.', { type: 'damageAllEnemies', amount: 2 }),
+  unit('jellyfish', 'Медуза', 'submarine', 3, 2, 2, 'rare', 'Яд: убивает любое существо, которое ранит.', ['poison']),
   // Замок
   unit('squire', 'Оруженосец', 'castle', 1, 2, 1, 'common', 'Рвётся в бой раньше рыцаря.'),
   unit('archer', 'Лучница', 'castle', 2, 3, 2, 'common', 'При выходе: 1 урона герою врага.', [], { type: 'damageEnemyHero', amount: 1 }),
@@ -53,6 +57,8 @@ const list: CardDef[] = [
   unit('ghost', 'Призрак', 'castle', 2, 2, 1, 'common', 'При гибели: возьми карту.', [], undefined, { type: 'draw', count: 1 }),
   spell('blessing', 'Благословение', 'castle', 2, 'common', 'Твоё существо получает +2/+2.', { type: 'buffTarget', attack: 2, health: 2 }),
   spell('banner', 'Королевское знамя', 'castle', 3, 'rare', 'Твои существа получают +1/+1.', { type: 'buffAllies', attack: 1, health: 1 }),
+  unit('standard_bearer', 'Знаменосец', 'castle', 3, 1, 3, 'epic', 'Аура: остальные твои существа получают +1 к атаке.', [], undefined, undefined, { attack: 1 }),
+  unit('paladin', 'Паладин', 'castle', 3, 3, 3, 'rare', 'Щит: гасит первый полученный удар.', ['shield']),
   // Космос
   unit('drone', 'Дрон', 'space', 1, 1, 1, 'common', 'Рывок: атакует сразу.', ['charge']),
   unit('astronaut', 'Астронавт', 'space', 2, 2, 3, 'common', 'Первым выходит в открытый космос.'),
@@ -60,6 +66,7 @@ const list: CardDef[] = [
   unit('shield', 'Щитовой модуль', 'space', 3, 1, 6, 'rare', 'Защитник станции.', ['guard']),
   unit('comet', 'Комета', 'space', 4, 5, 2, 'epic', 'Рывок: атакует сразу.', ['charge']),
   unit('titan', 'Звёздный титан', 'space', 8, 8, 8, 'legendary', 'Защитник размером с луну.', ['guard']),
+  unit('barrier', 'Силовой барьер', 'space', 2, 1, 3, 'rare', 'Защитник со щитом.', ['guard', 'shield']),
   spell('laser', 'Лазерный луч', 'space', 3, 'rare', '4 урона выбранной цели.', { type: 'damageTarget', amount: 4 }),
   spell('star_map', 'Звёздная карта', 'space', 2, 'common', 'Возьми 2 карты.', { type: 'draw', count: 2 }),
   spell('meteor', 'Метеор', 'space', 4, 'epic', '5 урона герою врага.', { type: 'damageEnemyHero', amount: 5 }),

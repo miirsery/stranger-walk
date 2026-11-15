@@ -3,7 +3,7 @@ import type { CardDef } from '@core/content/types';
 import type { GameSession } from '@core/session/gameSession';
 import CardFace from './CardFace.vue';
 
-const props = defineProps<{ session: GameSession; title: string; options: string[] }>();
+const props = defineProps<{ session: GameSession; title: string; options: string[]; canDecline: boolean }>();
 
 const card = (cardId: string): CardDef => props.session.content.card(cardId);
 const tint = (cardId: string): number => props.session.content.setting(card(cardId).setting).backgroundColor;
@@ -30,7 +30,7 @@ const owned = (cardId: string): number => props.session.cards.count(cardId);
           <p class="reward__owned">{{ owned(cardId) ? `уже есть: ${owned(cardId)}` : 'новая карта' }}</p>
         </li>
       </ul>
-      <button type="button" class="pixel-button pixel-button--ghost reward__later" @click="session.declineReward()">
+      <button v-if="canDecline" type="button" class="pixel-button pixel-button--ghost reward__later" @click="session.declineReward()">
         Не сейчас
       </button>
     </div>

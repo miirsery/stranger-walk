@@ -20,6 +20,11 @@ const skipDialog = (session: GameSession): void => {
   for (let i = 0; i < 20 && session.mode.kind === 'dialog'; i++) session.interact();
 };
 
+/** Если после победы предложена карта на выбор — берёт первую. */
+const takeChoice = (session: GameSession): void => {
+  if (session.mode.kind === 'reward') session.chooseReward(0);
+};
+
 const talk = (session: GameSession, standAt: Point): void => {
   place(session, standAt);
   session.interact();
@@ -133,7 +138,13 @@ describe('GameSession', () => {
     // Итог остаётся на экране, пока игрок не выйдет кнопкой действия.
     expect(session.mode.kind).toBe('minigame');
     session.interact();
+    // За победу предлагается ещё одна карта на выбор; отказаться от неё нельзя.
+    expect(session.mode.kind).toBe('reward');
+    session.declineReward();
+    expect(session.mode.kind).toBe('reward');
+    session.chooseReward(0);
     expect(session.mode.kind).toBe('world');
+    expect(session.cards.count('viper')).toBe(1);
     expect(session.quests.status('first_steps')).toBe('completed');
     expect(session.cards.count('bull')).toBe(1);
     expect(session.cards.count('archer')).toBe(1);
@@ -145,6 +156,7 @@ describe('GameSession', () => {
     talk(session, { x: 25, y: 3 });
     solveMemory(session);
     session.quitMinigame();
+    takeChoice(session);
     expect(session.quests.status('deep_cargo')).toBe('completed');
     expect(session.cards.count('depth_charge')).toBe(1);
     expect(session.cards.count('kraken')).toBe(1);
@@ -214,6 +226,7 @@ describe('GameSession', () => {
     expect(mode.kind === 'battle' && mode.battle.winner).toBe('player');
     expect(events).toContainEqual({ type: 'battleFinished', bossId: 'keeper', won: true });
     session.leaveBattle();
+    takeChoice(session);
     skipDialog(session);
     expect(session.quests.status('final_game')).toBe('completed');
     expect(session.cards.count('shadow')).toBe(1);
@@ -281,8 +294,9 @@ describe('GameSession', () => {
     it('повторный запуск пройденной мини-игры помечен и не выдаёт награды второй раз', () => {
       const session = atHarvestIntro();
       session.cheatWinMinigame();
-      const cards = session.cards.total;
       session.quitMinigame();
+      takeChoice(session);
+      const cards = session.cards.total;
       talk(session, { x: 19, y: 14 });
       const mode = session.mode;
       if (mode.kind !== 'minigame') throw new Error('ожидалась мини-игра');
@@ -361,7 +375,7 @@ describe('GameSession', () => {
       session.interact();
       const mode = session.mode;
       if (mode.kind !== 'reward') throw new Error(`ожидался выбор награды, а не ${mode.kind}`);
-      expect(mode.options).toEqual(['fox', 'reaper', 'feast']);
+      expect(mode.options).toEqual(['viper', 'reaper', 'feast']);
 
       session.chooseReward(99);
       expect(session.mode.kind).toBe('reward');

@@ -19,6 +19,7 @@ export const bosses: Record<string, BossDef> = {
       'knight', 'knight', 'gargoyle', 'gargoyle', 'banner', 'shadow',
     ],
     rewardCards: ['gargoyle', 'banner', 'ghost', 'astronaut'],
+    rewardChoices: ['paladin', 'barrier', 'jellyfish'],
     winLines: ['Невозможно… Моя колода повержена.', 'Забирай карты, Странник. Миры снова открыты.'],
     loseLines: ['Слабо. Возвращайся, когда соберёшь колоду получше.'],
   },
@@ -27,9 +28,10 @@ export const bosses: Record<string, BossDef> = {
     name: 'Капитан Пустоты',
     title: 'Хозяин станции «Горизонт»',
     setting: 'space',
-    // Здоровье и быстрая колода подобраны симуляцией (см. balance.test.ts):
-    // прежний вариант с 25 здоровья проигрывал собранной колоде игрока в 87% боёв.
-    health: 48,
+    // Играет «умным» ИИ: просчитывает ходы вперёд. Поэтому здоровья у него меньше,
+    // чем у жадного варианта (было 48) — значение подобрано симуляцией (см. balance.test.ts).
+    health: 24,
+    ai: 'smart',
     power: {
       name: 'Орбитальный залп',
       text: '2 урона герою противника.',
@@ -42,6 +44,7 @@ export const bosses: Record<string, BossDef> = {
       'comet', 'comet', 'meteor', 'meteor', 'laser', 'laser', 'bull', 'bull', 'titan',
     ],
     rewardCards: ['comet', 'laser', 'star_map', 'meteor', 'turret'],
+    rewardChoices: ['viper', 'paladin', 'barrier'],
     winLines: ['Чистая победа. Карты твои — и звёздные карты тоже.', 'Продолжение следует…'],
     loseLines: ['В космосе никто не услышит, как ты сдаёшься. Попробуй ещё.'],
   },

@@ -80,7 +80,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
         <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> <span class="game__hint-verb">{{ interactTarget.verb }}:</span> {{ interactTarget.name }}
       </p>
       <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
-      <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" />
+      <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" :can-decline="rewardOptions.canDecline" />
 
       <ul class="game__toasts" aria-live="polite">
         <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>

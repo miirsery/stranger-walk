@@ -169,6 +169,115 @@ watch(
   },
 );
 
+// ---------- Полёт заклинания ----------
+const battleRoot = ref<HTMLElement | null>(null);
+const playerHeroRef = ref<HTMLElement | null>(null);
+const enemyHeroRef = ref<HTMLElement | null>(null);
+const unitRefs = new Map<number, HTMLElement>();
+const setUnitRef = (uid: number, el: Element | null): void => {
+  if (el instanceof HTMLElement) unitRefs.set(uid, el);
+  else unitRefs.delete(uid);
+};
+
+interface SpellProjectile {
+  id: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+}
+
+const SPELL_FLY_MS = 420;
+const projectiles = ref<SpellProjectile[]>([]);
+let projectileId = 0;
+const projectileTimers = new Set<ReturnType<typeof setTimeout>>();
+
+const elementCenter = (el: HTMLElement, rootRect: DOMRect): { x: number; y: number } => {
+  const rect = el.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2 - rootRect.left, y: rect.top + rect.height / 2 - rootRect.top };
+};
+
+watch(
+  () => props.state.lastCast?.seq,
+  () => {
+    const cast = props.state.lastCast;
+    const root = battleRoot.value;
+    if (!cast || !root) return;
+    const rootRect = root.getBoundingClientRect();
+    const sourceEl = cast.side === 'player' ? playerHeroRef.value : enemyHeroRef.value;
+    const destEl =
+      cast.target.type === 'hero'
+        ? cast.side === 'player'
+          ? enemyHeroRef.value
+          : playerHeroRef.value
+        : unitRefs.get(cast.target.uid) ?? null;
+    if (!sourceEl || !destEl) return;
+    const from = elementCenter(sourceEl, rootRect);
+    const to = elementCenter(destEl, rootRect);
+    const item: SpellProjectile = {
+      id: projectileId++,
+      x1: from.x,
+      y1: from.y,
+      x2: to.x,
+      y2: to.y,
+      color: cast.side === 'player' ? 'var(--gold)' : 'var(--red)',
+    };
+    projectiles.value.push(item);
+    const timer = setTimeout(() => {
+      projectiles.value = projectiles.value.filter((candidate) => candidate.id !== item.id);
+      projectileTimers.delete(timer);
+    }, SPELL_FLY_MS);
+    projectileTimers.add(timer);
+  },
+);
+
+// ---------- Вылет цифр урона и лечения ----------
+interface FloatingNumber {
+  id: number;
+  /** `hero:player`, `hero:enemy` или `unit:<uid>`. */
+  key: string;
+  delta: number;
+}
+
+const FLOAT_MS = 900;
+const floats = ref<FloatingNumber[]>([]);
+let floatId = 0;
+let previousHealth = new Map<string, number>();
+const floatTimers = new Set<ReturnType<typeof setTimeout>>();
+
+const healthMap = (state: BattleState): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const side of ['player', 'enemy'] as const) {
+    map.set(`hero:${side}`, state.sides[side].hero.health);
+    for (const unit of state.sides[side].board) map.set(`unit:${unit.uid}`, unit.health);
+  }
+  return map;
+};
+
+const floatsFor = (key: string): FloatingNumber[] => floats.value.filter((item) => item.key === key);
+
+watch(
+  () => props.state,
+  (next) => {
+    const current = healthMap(next);
+    for (const [key, health] of current) {
+      const before = previousHealth.get(key);
+      // Новое существо (нет в прошлом снимке) цифр не даёт; герой уходит ниже нуля — показываем реальный урон.
+      if (before === undefined || before === health) continue;
+      const item = { id: floatId++, key, delta: health - before };
+      floats.value.push(item);
+      const timer = setTimeout(() => {
+        floats.value = floats.value.filter((candidate) => candidate.id !== item.id);
+        floatTimers.delete(timer);
+      }, FLOAT_MS);
+      floatTimers.add(timer);
+    }
+    previousHealth = current;
+  },
+  { immediate: true },
+);
+
 const report = (result: { ok: true } | { ok: false; reason: string }): void => {
   message.value = result.ok ? '' : result.reason;
 };
@@ -247,6 +356,8 @@ const endTurn = (): void => {
 onBeforeUnmount(() => {
   stopEnemy();
   if (lungeTimer !== null) clearTimeout(lungeTimer);
+  for (const timer of floatTimers) clearTimeout(timer);
+  for (const timer of projectileTimers) clearTimeout(timer);
 });
 
 watch(
@@ -259,9 +370,10 @@ watch(
 </script>
 
 <template>
-  <section class="battle" :class="{ 'battle--tutorial': showTutorial }" aria-label="Карточный бой">
+  <section ref="battleRoot" class="battle" :class="{ 'battle--tutorial': showTutorial }" aria-label="Карточный бой">
     <header class="battle__side">
       <button
+        ref="enemyHeroRef"
         type="button"
         class="battle__hero battle__hero--enemy"
         :class="{ 'battle__hero--target': canTargetHero, 'battle__hero--hit': hitHero === 'enemy' }"
@@ -270,6 +382,7 @@ watch(
       >
         <span class="battle__hero-name">{{ enemy.hero.name }}</span>
         <span :key="enemy.hero.health" class="battle__hp">♥ {{ Math.max(0, enemy.hero.health) }}</span>
+        <span v-for="item in floatsFor(`hero:enemy`)" :key="item.id" class="battle__float" :class="item.delta < 0 ? 'battle__float--damage' : 'battle__float--heal'" aria-hidden="true">{{ item.delta > 0 ? '+' : '' }}{{ item.delta }}</span>
       </button>
       <p class="battle__meta">
         Рука: {{ enemy.hand.length }} · Колода: {{ enemy.deck.length }}
@@ -283,6 +396,7 @@ watch(
       <TransitionGroup tag="ul" name="unit" class="battle__row" aria-label="Существа противника">
         <li v-for="unit in enemy.board" :key="unit.uid">
           <button
+            :ref="(el) => setUnitRef(unit.uid, el as Element | null)"
             type="button"
             class="battle__slot"
             :class="{
@@ -294,6 +408,7 @@ watch(
             @click="attack({ type: 'unit', uid: unit.uid })"
           >
             <CardFace :card="card(unit.cardId)" :attack="unit.attack" :health="unit.health" :tint="tint(unit.cardId)" compact />
+            <span v-for="item in floatsFor(`unit:${unit.uid}`)" :key="item.id" class="battle__float" :class="item.delta < 0 ? 'battle__float--damage' : 'battle__float--heal'" aria-hidden="true">{{ item.delta > 0 ? '+' : '' }}{{ item.delta }}</span>
           </button>
         </li>
         <li v-if="enemy.board.length === 0" key="empty" class="battle__empty">стол противника пуст</li>
@@ -302,6 +417,7 @@ watch(
       <TransitionGroup tag="ul" name="unit" class="battle__row" aria-label="Твои существа">
         <li v-for="unit in player.board" :key="unit.uid">
           <button
+            :ref="(el) => setUnitRef(unit.uid, el as Element | null)"
             type="button"
             class="battle__slot"
             :class="{
@@ -315,6 +431,7 @@ watch(
             @click="selectUnit(unit)"
           >
             <CardFace :card="card(unit.cardId)" :attack="unit.attack" :health="unit.health" :tint="tint(unit.cardId)" compact />
+            <span v-for="item in floatsFor(`unit:${unit.uid}`)" :key="item.id" class="battle__float" :class="item.delta < 0 ? 'battle__float--damage' : 'battle__float--heal'" aria-hidden="true">{{ item.delta > 0 ? '+' : '' }}{{ item.delta }}</span>
           </button>
         </li>
         <li v-if="player.board.length === 0" key="empty" class="battle__empty">сыграй карту из руки</li>
@@ -330,9 +447,10 @@ watch(
         </button>
       </aside>
       <div class="battle__status">
-        <div class="battle__hero" :class="{ 'battle__hero--hit': hitHero === 'player' }">
+        <div ref="playerHeroRef" class="battle__hero" :class="{ 'battle__hero--hit': hitHero === 'player' }">
           <span class="battle__hero-name">{{ player.hero.name }}</span>
           <span :key="player.hero.health" class="battle__hp">♥ {{ Math.max(0, player.hero.health) }}</span>
+          <span v-for="item in floatsFor(`hero:player`)" :key="item.id" class="battle__float" :class="item.delta < 0 ? 'battle__float--damage' : 'battle__float--heal'" aria-hidden="true">{{ item.delta > 0 ? '+' : '' }}{{ item.delta }}</span>
         </div>
         <p class="battle__mana" :aria-label="`Мана: ${player.mana} из ${player.maxMana}`">
           <span v-for="index in player.maxMana" :key="index" class="battle__crystal" :class="{ 'battle__crystal--spent': index > player.mana }" />
@@ -380,6 +498,20 @@ watch(
         </li>
       </ul>
     </footer>
+
+    <span
+      v-for="item in projectiles"
+      :key="item.id"
+      class="battle__projectile"
+      :style="{
+        '--x1': `${item.x1}px`,
+        '--y1': `${item.y1}px`,
+        '--dx': `${item.x2 - item.x1}px`,
+        '--dy': `${item.y2 - item.y1}px`,
+        '--glow': item.color,
+      }"
+      aria-hidden="true"
+    />
 
     <div v-if="mulliganPhase" class="battle__result" role="dialog" aria-modal="true" aria-label="Стартовая рука">
       <div class="pixel-panel battle__mulligan">
@@ -447,6 +579,7 @@ watch(
 }
 
 .battle__hero {
+  position: relative;
   display: flex;
   gap: 12px;
   align-items: center;
@@ -474,6 +607,76 @@ watch(
 .battle__hp {
   color: var(--red);
   animation: hp-change 0.3s steps(3);
+}
+
+.battle__float {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 5;
+  font-size: 1.4em;
+  pointer-events: none;
+  text-shadow: 2px 2px 0 var(--ink);
+  animation: float-up 0.9s steps(8) forwards;
+}
+
+.battle__float--damage {
+  color: var(--red);
+}
+
+.battle__float--heal {
+  color: #6bdc6b;
+}
+
+@keyframes float-up {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(-50%, -32px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle__float {
+    animation-name: float-fade;
+  }
+
+  @keyframes float-fade {
+    to {
+      opacity: 0;
+    }
+  }
+}
+
+.battle__projectile {
+  position: absolute;
+  top: var(--y1);
+  left: var(--x1);
+  z-index: 6;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  background: var(--glow);
+  border-radius: 50%;
+  box-shadow: 0 0 10px 3px var(--glow);
+  transform: translate(-50%, -50%);
+  animation: spell-fly 0.42s linear forwards;
+}
+
+@keyframes spell-fly {
+  to {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .battle__projectile {
+    display: none;
+  }
 }
 
 @keyframes hp-change {
@@ -521,6 +724,7 @@ watch(
 }
 
 .battle__slot {
+  position: relative;
   display: block;
   padding: 0;
   cursor: pointer;

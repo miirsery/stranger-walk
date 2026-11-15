@@ -1,4 +1,4 @@
-import type { CardDef, CardEffect, CardId, CardKeyword, EffectTargeting, HeroPowerDef } from '../content/types';
+import type { AiLevel, CardDef, CardEffect, CardId, CardKeyword, EffectTargeting, HeroPowerDef } from '../content/types';
 import { effectTargeting } from '../content/types';
 import type { Rng } from '../util/rng';
 import { shuffle } from '../util/rng';
@@ -17,6 +17,8 @@ export interface UnitState {
   maxHealth: number;
   keywords: CardKeyword[];
   canAttack: boolean;
+  /** Сколько атаки из `attack` даёт аура союзника (пересчитывается при каждом изменении стола). */
+  auraBonus: number;
 }
 
 export interface HeroState {
@@ -47,6 +49,13 @@ export interface LastAttack {
   target: AttackTarget;
 }
 
+/** Последнее заклинание или сила героя с целью — чтобы интерфейс пустил заклинание в полёт. */
+export interface LastCast {
+  seq: number;
+  side: Side;
+  target: AttackTarget;
+}
+
 /** До первого хода игрок может заменить часть стартовой руки. */
 export type BattlePhase = 'mulligan' | 'play';
 
@@ -58,6 +67,7 @@ export interface BattleState {
   sides: Record<Side, SideState>;
   log: string[];
   lastAttack: LastAttack | null;
+  lastCast: LastCast | null;
 }
 
 export type AttackTarget = { type: 'hero' } | { type: 'unit'; uid: number };
@@ -83,6 +93,8 @@ export interface BattleParticipant {
   health: number;
   deck: readonly CardId[];
   power?: HeroPowerDef;
+  /** Насколько умно играет ИИ за этого участника. По умолчанию — жадный. */
+  ai?: AiLevel;
 }
 
 export interface BattleConfig {
@@ -139,6 +151,7 @@ export class CardBattle {
       sides: { player: side(config.player), enemy: side(config.enemy) },
       log: [],
       lastAttack: null,
+      lastCast: null,
     };
     for (let i = 0; i < this.rules.startingHand; i++) {
       this.draw('player');
@@ -177,6 +190,19 @@ export class CardBattle {
     return this.state.winner;
   }
 
+  /** Независимая копия боя для «а что, если»: ИИ проигрывает на ней варианты хода. */
+  clone(): CardBattle {
+    const copy = Object.create(CardBattle.prototype) as CardBattle;
+    Object.assign(copy, {
+      rules: this.rules,
+      resolveCard: this.resolveCard,
+      rng: this.rng,
+      nextUid: this.nextUid,
+      state: this.snapshot(),
+    });
+    return copy;
+  }
+
   /** Глубокая копия состояния — безопасно отдавать в UI. */
   snapshot(): BattleState {
     const copySide = (side: SideState): SideState => ({
@@ -191,6 +217,7 @@ export class CardBattle {
       sides: { player: copySide(this.state.sides.player), enemy: copySide(this.state.sides.enemy) },
       log: [...this.state.log],
       lastAttack: this.state.lastAttack ? { ...this.state.lastAttack } : null,
+      lastCast: this.state.lastCast ? { ...this.state.lastCast } : null,
     };
   }
 
@@ -246,6 +273,7 @@ export class CardBattle {
     own.mana -= power.cost;
     own.powerUsed = true;
     this.log(`${own.hero.name}: сила «${power.name}»`);
+    if (target) this.state.lastCast = { seq: (this.state.lastCast?.seq ?? 0) + 1, side, target };
     this.applyEffect(side, power.effect, target);
     this.checkWinner();
     return ok;
@@ -283,6 +311,7 @@ export class CardBattle {
     own.mana -= card.cost;
     if (card.type === 'spell') {
       this.log(`${own.hero.name}: заклинание «${card.name}»`);
+      if (target) this.state.lastCast = { seq: (this.state.lastCast?.seq ?? 0) + 1, side, target };
       this.applyEffect(side, card.effect, target);
     } else {
       this.log(`${own.hero.name}: «${card.name}» выходит на стол`);
@@ -297,7 +326,9 @@ export class CardBattle {
         maxHealth: card.health,
         keywords: [...card.keywords],
         canAttack: card.keywords.includes('charge'),
+        auraBonus: 0,
       });
+      this.refreshAuras(side);
     }
     this.checkWinner();
     return ok;
@@ -334,8 +365,8 @@ export class CardBattle {
       this.log(`«${attacker.name}» бьёт героя ${foe.hero.name} на ${attacker.attack}`);
     } else {
       const defender = foe.board.find((unit) => unit.uid === target.uid) as UnitState;
-      defender.health -= attacker.attack;
-      attacker.health -= defender.attack;
+      this.damageUnit(defender, attacker.attack, attacker.keywords.includes('poison'));
+      this.damageUnit(attacker, defender.attack, defender.keywords.includes('poison'));
       this.log(`«${attacker.name}» атакует «${defender.name}»`);
       this.buryDead(side);
       this.buryDead(opponentOf(side));
@@ -401,7 +432,7 @@ export class CardBattle {
         this.log(`${own.hero.name} берёт карты: ${effect.count}`);
         break;
       case 'damageAllEnemies':
-        for (const unit of foe.board) unit.health -= effect.amount;
+        for (const unit of foe.board) this.damageUnit(unit, effect.amount);
         this.log(`Все существа героя ${foe.hero.name} получают ${effect.amount} урона`);
         this.buryDead(opponentOf(side));
         break;
@@ -416,8 +447,7 @@ export class CardBattle {
       case 'damageTarget': {
         const unit = target?.type === 'unit' ? foe.board.find((candidate) => candidate.uid === target.uid) : undefined;
         if (unit) {
-          unit.health -= effect.amount;
-          this.log(`«${unit.name}» получает ${effect.amount} урона`);
+          this.damageUnit(unit, effect.amount);
           this.buryDead(opponentOf(side));
         } else {
           foe.hero.health -= effect.amount;
@@ -434,6 +464,36 @@ export class CardBattle {
         this.log(`«${unit.name}» получает +${effect.attack}/+${effect.health}`);
         break;
       }
+    }
+  }
+
+  /**
+   * Урон существу. «Щит» гасит первый же удар и пропадает; «яд» убивает любое существо,
+   * которому нанесён хоть какой-то урон.
+   */
+  private damageUnit(unit: UnitState, amount: number, poison = false): void {
+    if (amount <= 0) return;
+    if (unit.keywords.includes('shield')) {
+      unit.keywords = unit.keywords.filter((keyword) => keyword !== 'shield');
+      this.log(`Щит «${unit.name}» поглощает удар`);
+      return;
+    }
+    unit.health -= amount;
+    if (poison) unit.health = Math.min(unit.health, 0);
+    this.log(`«${unit.name}» получает ${amount} урона`);
+  }
+
+  /** Пересчитывает бонусы аур на столе стороны: каждое существо получает ауры остальных. */
+  private refreshAuras(side: Side): void {
+    const board = this.state.sides[side].board;
+    for (const unit of board) {
+      const bonus = board.reduce((sum, other) => {
+        if (other === unit) return sum;
+        const card = this.resolveCard(other.cardId);
+        return sum + (card.type === 'unit' && card.aura ? card.aura.attack : 0);
+      }, 0);
+      unit.attack += bonus - unit.auraBonus;
+      unit.auraBonus = bonus;
     }
   }
 
@@ -475,6 +535,7 @@ export class CardBattle {
     const dead = own.board.filter((unit) => unit.health <= 0);
     if (dead.length === 0) return;
     own.board = own.board.filter((unit) => unit.health > 0);
+    this.refreshAuras(side);
     for (const unit of dead) {
       this.log(`«${unit.name}» погибает`);
       const card = this.resolveCard(unit.cardId);

@@ -43,7 +43,7 @@ export interface GameBridge {
   /** С чем сейчас можно взаимодействовать (персонаж, табличка, сундук), или null. */
   interactTarget: Ref<{ verb: string; name: string } | null>;
   /** Карты, из которых предлагается выбрать одну (сундук), или null. */
-  rewardOptions: ShallowRef<{ title: string; options: string[] } | null>;
+  rewardOptions: ShallowRef<{ title: string; options: string[]; canDecline: boolean } | null>;
   /** Записать прогресс прямо сейчас (помимо автосохранения). */
   saveNow: () => void;
 }
@@ -86,7 +86,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
   const paused = ref(false);
   const panel = ref<GamePanel | null>(null);
   const interactTarget = ref<{ verb: string; name: string } | null>(null);
-  const rewardOptions = shallowRef<{ title: string; options: string[] } | null>(null);
+  const rewardOptions = shallowRef<{ title: string; options: string[]; canDecline: boolean } | null>(null);
 
   let handle: GameHandle | null = null;
   let nextToastId = 1;
@@ -111,7 +111,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     levelName.value = session.world.level.name;
     dialog.value = mode.kind === 'dialog' ? { ...mode.dialog } : null;
     battle.value = mode.kind === 'battle' ? mode.battle.snapshot() : null;
-    rewardOptions.value = mode.kind === 'reward' ? { title: mode.title, options: [...mode.options] } : null;
+    rewardOptions.value = mode.kind === 'reward' ? { title: mode.title, options: [...mode.options], canDecline: mode.chestKey !== null } : null;
     quests.value = session.quests.list();
     cardTotal.value = session.cards.total;
     deckSize.value = session.cards.deck.length;

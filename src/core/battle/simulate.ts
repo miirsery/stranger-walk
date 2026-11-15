@@ -33,7 +33,7 @@ export const simulateBattles = (
     const battle = new CardBattle({ resolveCard, player, enemy, rng });
     for (let turn = 0; turn < MAX_TURNS && !battle.winner; turn++) {
       const side: Side = battle.active;
-      playAiTurn(battle, side);
+      playAiTurn(battle, side, (side === 'player' ? player : enemy).ai ?? 'basic');
     }
     if (battle.winner === 'player') playerWins += 1;
     turns += battle.snapshot().turn;

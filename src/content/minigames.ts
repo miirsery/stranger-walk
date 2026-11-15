@@ -14,6 +14,7 @@ export const minigames: Record<string, MinigameDef> = {
     maxMisses: 3,
     music: 'battle',
     rewardCards: ['archer', 'feast'],
+    rewardChoices: ['viper', 'scarecrow', 'fox'],
   },
   cargo_sort: {
     id: 'cargo_sort',
@@ -25,5 +26,6 @@ export const minigames: Record<string, MinigameDef> = {
     revealMs: 900,
     music: 'battle',
     rewardCards: ['depth_charge', 'harpoon'],
+    rewardChoices: ['jellyfish', 'diver', 'torpedo'],
   },
 };

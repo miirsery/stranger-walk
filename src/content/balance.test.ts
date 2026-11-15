@@ -28,7 +28,13 @@ const winRateAgainst = (bossId: string, deck: string[]): number => {
   return simulateBattles(
     registry.card,
     { name: 'Странник', health: player.heroHealth, deck, ...(player.power ? { power: player.power } : {}) },
-    { name: boss.name, health: boss.health, deck: boss.deck, ...(boss.power ? { power: boss.power } : {}) },
+    {
+      name: boss.name,
+      health: boss.health,
+      deck: boss.deck,
+      ...(boss.power ? { power: boss.power } : {}),
+      ...(boss.ai ? { ai: boss.ai } : {}),
+    },
     GAMES,
     7,
   ).winRate;
@@ -43,7 +49,7 @@ describe('баланс боссов', () => {
     expect(rate).toBeLessThanOrEqual(0.7);
   });
 
-  it('Капитан Пустоты: труднее Хранителя — 30–55% побед', () => {
+  it('Капитан Пустоты: «умный» ИИ, труднее Хранителя — 30–55% побед', () => {
     const rate = winRateAgainst('void_captain', deckAfter(beforeCaptain));
     expect(rate).toBeGreaterThanOrEqual(0.3);
     expect(rate).toBeLessThanOrEqual(0.55);
@@ -51,5 +57,14 @@ describe('баланс боссов', () => {
 
   it('стартовой колоды для Хранителя мало: квесты действительно нужны', () => {
     expect(winRateAgainst('keeper', [...gameContent.player.starterDeck])).toBeLessThan(0.3);
+  });
+});
+
+describe('уровни ИИ', () => {
+  it('умный ИИ обыгрывает жадного на той же колоде', () => {
+    const boss = registry.boss('void_captain');
+    const base = { name: boss.name, health: boss.health, deck: boss.deck, ...(boss.power ? { power: boss.power } : {}) };
+    const { winRate } = simulateBattles(registry.card, { ...base, ai: 'smart' }, { ...base, ai: 'basic' }, 150, 11);
+    expect(winRate).toBeGreaterThan(0.55);
   });
 });

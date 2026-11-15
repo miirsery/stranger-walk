@@ -25,6 +25,7 @@ const info = computed(() => {
     wonBefore: mode.wonBefore,
     won: mode.game.status === 'won',
     rewards: mode.def.rewardCards.map((cardId) => props.session.content.card(cardId).name),
+    hasChoice: (mode.def.rewardChoices?.length ?? 0) > 0,
   };
 });
 
@@ -79,7 +80,7 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
         <p v-if="info.wonBefore" class="minigame__note">
           Ты уже прошёл эту мини-игру, награда получена. Можно сыграть ещё раз просто так — или выйти.
         </p>
-        <p v-else-if="info.rewards.length" class="minigame__note">Награда за победу: {{ info.rewards.join(', ') }}.</p>
+        <p v-else-if="info.rewards.length" class="minigame__note">Награда за победу: {{ info.rewards.join(', ') }}{{ info.hasChoice ? ' и карта на выбор' : '' }}.</p>
         <div class="minigame__actions">
           <button type="button" class="pixel-button" autofocus @click="session.startMinigame()">
             {{ info.wonBefore ? 'Сыграть ещё раз' : 'Начать' }}
@@ -94,7 +95,7 @@ onBeforeUnmount(() => cancelAnimationFrame(frame));
         <h2 class="minigame__title" :class="info.won ? 'minigame__title--won' : 'minigame__title--lost'">
           {{ info.won ? 'Победа!' : 'Не вышло' }}
         </h2>
-        <p v-if="info.won && !info.wonBefore && info.rewards.length">Получены карты: {{ info.rewards.join(', ') }}.</p>
+        <p v-if="info.won && !info.wonBefore && info.rewards.length">Получены карты: {{ info.rewards.join(', ') }}.{{ info.hasChoice ? ' При выходе выберешь ещё одну.' : '' }}</p>
         <p v-else-if="info.won">Отличная игра!</p>
         <p v-else>Попробуй ещё раз — или вернись позже.</p>
         <div class="minigame__actions">

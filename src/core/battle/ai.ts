@@ -1,4 +1,4 @@
-import type { CardEffect } from '../content/types';
+import type { AiLevel, CardEffect } from '../content/types';
 import type { AttackTarget, BattleState, CardBattle, Side, UnitState } from './cardBattle';
 import { opponentOf } from './cardBattle';
 
@@ -60,7 +60,7 @@ const chooseEffectTarget = (effect: CardEffect, state: BattleState, side: Side):
  * если урона хватает, иначе выгодно разменивается по существам или бьёт в героя. Затем передаёт ход.
  * Возвращает null, если сейчас не ход этой стороны или бой окончен.
  */
-export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiAction | null => {
+const chooseGreedyAction = (battle: CardBattle, side: Side): AiAction | null => {
   if (battle.winner || battle.active !== side) return null;
   const state = battle.snapshot();
   const own = state.sides[side];
@@ -113,22 +113,105 @@ export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy'): AiActi
   return { type: 'endTurn' };
 };
 
-/** Выполняет одно действие ИИ. Возвращает его (или null, если действовать нельзя). */
-export const performAiStep = (battle: CardBattle, side: Side = 'enemy'): AiAction | null => {
-  const action = chooseAiAction(battle, side);
-  if (!action) return null;
+const applyAction = (battle: CardBattle, side: Side, action: AiAction): void => {
   if (action.type === 'play') battle.playCard(side, action.handIndex, action.target);
   else if (action.type === 'power') battle.usePower(side, action.target);
   else if (action.type === 'attack') battle.attack(side, action.attackerUid, action.target);
   else battle.endTurn(side);
+};
+
+const MAX_STEPS = 100;
+
+/** Оценка положения стороны: разница здоровья героев и силы столов; победа и поражение перевешивают всё. */
+const evaluate = (battle: CardBattle, side: Side): number => {
+  if (battle.winner) return battle.winner === side ? 10_000 : -10_000;
+  const state = battle.snapshot();
+  const own = state.sides[side];
+  const foe = state.sides[opponentOf(side)];
+  const boardPower = (units: UnitState[]): number =>
+    units.reduce((sum, unit) => sum + unit.attack * 1.5 + unit.health + (unit.keywords.includes('guard') ? 1 : 0), 0);
+  return (
+    (own.hero.health - foe.hero.health) * 1.2 +
+    boardPower(own.board) -
+    boardPower(foe.board) +
+    (own.hand.length - foe.hand.length) * 0.5
+  );
+};
+
+/** Все осмысленные следующие действия: карты (с каждой целью), сила героя и каждая атака. */
+const candidateActions = (battle: CardBattle, side: Side): AiAction[] => {
+  const own = battle.snapshot().sides[side];
+  const actions: AiAction[] = [];
+  own.hand.forEach((_, handIndex) => {
+    if (!battle.canPlay(side, handIndex).ok) return;
+    const targets = battle.validPlayTargets(side, handIndex);
+    if (targets.length === 0) actions.push({ type: 'play', handIndex });
+    else for (const target of targets) actions.push({ type: 'play', handIndex, target });
+  });
+  if (own.power && battle.canUsePower(side).ok) {
+    const targets = battle.validPowerTargets(side);
+    if (targets.length === 0) actions.push({ type: 'power' });
+    else for (const target of targets) actions.push({ type: 'power', target });
+  }
+  const targets = battle.validTargets(side);
+  for (const unit of own.board) {
+    if (!unit.canAttack || unit.attack <= 0) continue;
+    for (const target of targets) actions.push({ type: 'attack', attackerUid: unit.uid, target });
+  }
+  return actions;
+};
+
+/** Доигрывает остаток хода жадным ИИ — так оценивается, куда приведёт пробное действие. */
+const finishTurnGreedily = (battle: CardBattle, side: Side): void => {
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const action = chooseGreedyAction(battle, side);
+    if (!action || action.type === 'endTurn') return;
+    applyAction(battle, side, action);
+  }
+};
+
+/**
+ * Умный ИИ: для каждого возможного действия проигрывает на копии боя остаток хода жадным ИИ
+ * и выбирает действие, после которого положение лучше. Конец хода тоже вариант — со своей оценкой.
+ */
+const chooseSmartAction = (battle: CardBattle, side: Side): AiAction | null => {
+  if (battle.winner || battle.active !== side) return null;
+  const options: AiAction[] = [...candidateActions(battle, side), { type: 'endTurn' }];
+  let best: AiAction = { type: 'endTurn' };
+  let bestScore = -Infinity;
+  for (const action of options) {
+    const trial = battle.clone();
+    if (action.type !== 'endTurn') {
+      applyAction(trial, side, action);
+      finishTurnGreedily(trial, side);
+    }
+    const score = evaluate(trial, side);
+    // Небольшая прибавка «выжать максимум» — при равной оценке предпочитаем действие, а не конец хода.
+    const adjusted = action.type === 'endTurn' ? score : score + 0.01;
+    if (adjusted > bestScore) {
+      bestScore = adjusted;
+      best = action;
+    }
+  }
+  return best;
+};
+
+export const chooseAiAction = (battle: CardBattle, side: Side = 'enemy', level: AiLevel = 'basic'): AiAction | null =>
+  level === 'smart' ? chooseSmartAction(battle, side) : chooseGreedyAction(battle, side);
+
+/** Выполняет одно действие ИИ. Возвращает его (или null, если действовать нельзя). */
+export const performAiStep = (battle: CardBattle, side: Side = 'enemy', level: AiLevel = 'basic'): AiAction | null => {
+  const action = chooseAiAction(battle, side, level);
+  if (!action) return null;
+  applyAction(battle, side, action);
   return action;
 };
 
 /** Весь ход ИИ целиком — для тестов и симуляций. */
-export const playAiTurn = (battle: CardBattle, side: Side = 'enemy'): void => {
+export const playAiTurn = (battle: CardBattle, side: Side = 'enemy', level: AiLevel = 'basic'): void => {
   // Ограничение на случай ошибки в правилах: ход не может длиться бесконечно.
-  for (let step = 0; step < 100; step++) {
-    const action = performAiStep(battle, side);
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const action = performAiStep(battle, side, level);
     if (!action || action.type === 'endTurn') return;
   }
 };

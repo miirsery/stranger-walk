@@ -184,6 +184,7 @@ export const validateContent = (content: GameContent): string[] => {
     need(content.music, 'трек', boss.music, `Босс ${boss.id}`);
     needCards(boss.deck, `Босс ${boss.id}`);
     needCards(boss.rewardCards, `Босс ${boss.id}`);
+    needCards(boss.rewardChoices ?? [], `Босс ${boss.id}`);
     if (boss.deck.length === 0) errors.push(`Босс ${boss.id}: пустая колода`);
     if (boss.power && (boss.power.cost < 0 || !effectIsValid(boss.power.effect))) {
       errors.push(`Босс ${boss.id}: некорректная сила героя`);
@@ -193,6 +194,7 @@ export const validateContent = (content: GameContent): string[] => {
   for (const minigame of Object.values(content.minigames)) {
     need(content.music, 'трек', minigame.music, `Мини-игра ${minigame.id}`);
     needCards(minigame.rewardCards, `Мини-игра ${minigame.id}`);
+    needCards(minigame.rewardChoices ?? [], `Мини-игра ${minigame.id}`);
     if (minigame.type === 'memory') {
       needCards(minigame.cards, `Мини-игра ${minigame.id}`);
       if (new Set(minigame.cards).size !== minigame.cards.length || minigame.cards.length < 2) {

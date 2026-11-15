@@ -50,7 +50,7 @@ export const levels: Record<string, LevelDef> = {
         at: { x: 2, y: 7 },
         lines: ['Тихие луга.', 'Старейшина — у тропы на севере. Загон фермера — на юго-востоке. Люк на подлодку — на востоке.'],
       },
-      { id: 'pond_chest', type: 'chest', at: { x: 25, y: 2 }, choices: ['fox', 'reaper', 'feast'] },
+      { id: 'pond_chest', type: 'chest', at: { x: 25, y: 2 }, choices: ['viper', 'reaper', 'feast'] },
     ],
   },
   submarine: {
@@ -90,7 +90,7 @@ export const levels: Record<string, LevelDef> = {
         at: { x: 8, y: 1 },
         lines: ['«Наутилус-8», центральный отсек.', 'Механик — в кормовом отсеке на востоке. Шлюз к замку — там же.'],
       },
-      { id: 'stern_chest', type: 'chest', at: { x: 26, y: 6 }, choices: ['harpoon', 'mine', 'crab'] },
+      { id: 'stern_chest', type: 'chest', at: { x: 26, y: 6 }, choices: ['harpoon', 'jellyfish', 'crab'] },
     ],
   },
   castle: {
@@ -132,7 +132,7 @@ export const levels: Record<string, LevelDef> = {
         at: { x: 12, y: 12 },
         lines: ['Тронный зал.', 'Вошедший садится за стол. Проигравший оставляет карты.'],
       },
-      { id: 'hall_chest', type: 'chest', at: { x: 2, y: 11 }, choices: ['ghost', 'blessing', 'knight'] },
+      { id: 'hall_chest', type: 'chest', at: { x: 2, y: 11 }, choices: ['paladin', 'standard_bearer', 'knight'] },
     ],
   },
   station: {
@@ -155,6 +155,6 @@ export const levels: Record<string, LevelDef> = {
     spawn: { x: 2, y: 4 },
     npcs: [{ npcId: 'void_captain', at: { x: 18, y: 5 } }],
     portals: [{ at: { x: 0, y: 4 }, toLevel: 'castle', toSpawn: { x: 18, y: 2 } }],
-    objects: [{ id: 'orbit_chest', type: 'chest', at: { x: 10, y: 8 }, choices: ['laser', 'shield', 'star_map'] }],
+    objects: [{ id: 'orbit_chest', type: 'chest', at: { x: 10, y: 8 }, choices: ['laser', 'barrier', 'star_map'] }],
   },
 };
