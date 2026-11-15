@@ -114,6 +114,8 @@ export const validateContent = (content: GameContent): string[] => {
       checkConditions(portal.requires, where);
     }
     const objectIds = new Set<string>();
+    const doorIds = new Set((level.objects ?? []).filter((object) => object.type === 'door').map((object) => object.id));
+    const openedDoorIds = new Set((level.objects ?? []).filter((object) => object.type === 'lever').flatMap((object) => object.opens));
     for (const object of level.objects ?? []) {
       const at = `объект ${object.id}`;
       if (objectIds.has(object.id)) errors.push(`${where}: ${at} — повтор id`);
@@ -128,6 +130,15 @@ export const validateContent = (content: GameContent): string[] => {
       if (object.type === 'chest') {
         needCards(object.choices, `${where}, ${at}`);
         if (object.choices.length < 2) errors.push(`${where}: ${at} — в сундуке нужен выбор минимум из двух карт`);
+      }
+      if (object.type === 'lever') {
+        if (object.opens.length === 0) errors.push(`${where}: ${at} — рычаг ничего не открывает`);
+        for (const doorId of object.opens) {
+          if (!doorIds.has(doorId)) errors.push(`${where}: ${at} — неизвестная дверь «${doorId}»`);
+        }
+      }
+      if (object.type === 'door' && !openedDoorIds.has(object.id)) {
+        errors.push(`${where}: ${at} — дверь никогда не открывается: нет рычага, который её открывает`);
       }
     }
   }

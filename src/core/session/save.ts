@@ -24,6 +24,8 @@ export interface SaveData {
   wonMinigames: string[];
   /** Открытые сундуки в виде «уровень:объект». */
   openedChests: string[];
+  /** Открытые двери в виде «уровень:объект». */
+  openedDoors: string[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -73,7 +75,8 @@ export const parseSave = (raw: unknown): SaveData | null => {
     cards: { owned, deck: cards.deck },
     defeatedBosses: raw.defeatedBosses,
     wonMinigames: raw.wonMinigames,
-    // Поле появилось позже остальных: в старых сохранениях его нет.
+    // Эти поля появились позже остальных: в старых сохранениях их нет.
     openedChests: isStringArray(raw.openedChests) ? raw.openedChests : [],
+    openedDoors: isStringArray(raw.openedDoors) ? raw.openedDoors : [],
   };
 };

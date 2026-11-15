@@ -96,6 +96,8 @@ export class GameSession {
   private lastPortalKey: string | null = null;
   private portalsForcedOpen = false;
   private readonly openedChests = new Set<string>();
+  /** Открытые двери в виде «уровень:объект» — как и сундуки, открываются насовсем. */
+  private readonly openedDoors = new Set<string>();
   /** Карты на выбор за только что выигранную мини-игру: предлагаются при выходе с экрана итога. */
   private pendingMinigameChoices: CardId[] | null = null;
   private readonly rng: Rng;
@@ -106,6 +108,7 @@ export class GameSession {
     this.world = new WorldState(this.content, content.player.startLevel);
     this.quests = new QuestLog(this.content.quest);
     this.cards = new CardCollection(content.deckRules, content.player.starterDeck);
+    this.syncDoors();
   }
 
   /**
@@ -126,6 +129,8 @@ export class GameSession {
     for (const id of save.defeatedBosses) if (has(content.bosses, id)) session.defeatedBosses.add(id);
     for (const id of save.wonMinigames) if (has(content.minigames, id)) session.wonMinigames.add(id);
     for (const key of save.openedChests) session.openedChests.add(key);
+    for (const key of save.openedDoors) session.openedDoors.add(key);
+    session.syncDoors();
     return session;
   }
 
@@ -147,6 +152,7 @@ export class GameSession {
       defeatedBosses: [...this.defeatedBosses],
       wonMinigames: [...this.wonMinigames],
       openedChests: [...this.openedChests],
+      openedDoors: [...this.openedDoors],
     };
   }
 
@@ -213,13 +219,32 @@ export class GameSession {
       return { verb: 'поговорить', name: this.content.npc(target.npc.npcId).name, at: target.npc.at };
     }
     const { object } = target;
-    if (object.type === 'sign') return { verb: 'прочитать', name: 'Табличка', at: object.at };
-    return this.isChestOpened(object.id) ? null : { verb: 'открыть', name: 'Сундук', at: object.at };
+    switch (object.type) {
+      case 'sign':
+        return { verb: 'прочитать', name: 'Табличка', at: object.at };
+      case 'chest':
+        return this.isChestOpened(object.id) ? null : { verb: 'открыть', name: 'Сундук', at: object.at };
+      case 'lever':
+        return this.isLeverPulled(object) ? null : { verb: 'потянуть', name: 'Рычаг', at: object.at };
+      case 'door':
+        // Дверь не объект взаимодействия — findInteractable её не предлагает.
+        return null;
+    }
   }
 
   /** Открыт ли сундук на текущем уровне. */
   isChestOpened(objectId: string): boolean {
     return this.openedChests.has(this.chestKey(objectId));
+  }
+
+  /** Открыта ли дверь на текущем уровне (по id объекта). */
+  isDoorOpen(objectId: string): boolean {
+    return this.world.isDoorOpen(objectId);
+  }
+
+  /** Рычаг уже потянут, если все двери, которые он открывает, уже открыты. */
+  private isLeverPulled(lever: Extract<WorldObjectDef, { type: 'lever' }>): boolean {
+    return lever.opens.every((doorId) => this.world.isDoorOpen(doorId));
   }
 
   /** Забрать одну из предложенных карт; сундук после этого пуст. */
@@ -319,6 +344,7 @@ export class GameSession {
   cheatTeleport(levelId: string): void {
     if (this.currentMode.kind !== 'world') return;
     this.world.loadLevel(levelId);
+    this.syncDoors();
     this.lastPortalKey = null;
     this.events.emit({ type: 'levelChanged', levelId });
     this.progress({ type: 'levelEntered', levelId });
@@ -393,13 +419,39 @@ export class GameSession {
     return `${this.world.level.id}:${objectId}`;
   }
 
+  private doorKey(objectId: string): string {
+    return `${this.world.level.id}:${objectId}`;
+  }
+
+  /** Отмечает в `WorldState` текущего уровня, какие его двери уже были открыты раньше. */
+  private syncDoors(): void {
+    const open = (this.world.level.objects ?? [])
+      .filter((object): object is Extract<WorldObjectDef, { type: 'door' }> => object.type === 'door')
+      .filter((object) => this.openedDoors.has(this.doorKey(object.id)))
+      .map((object) => object.id);
+    this.world.setOpenDoors(new Set(open));
+  }
+
   private useObject(object: WorldObjectDef): void {
-    if (object.type === 'sign') {
-      this.openDialog('Табличка', object.lines, []);
-      return;
+    switch (object.type) {
+      case 'sign':
+        this.openDialog('Табличка', object.lines, []);
+        return;
+      case 'chest':
+        if (this.isChestOpened(object.id)) return;
+        this.setMode({ kind: 'reward', title: 'Сундук', options: object.choices, chestKey: this.chestKey(object.id) });
+        return;
+      case 'lever':
+        if (this.isLeverPulled(object)) return;
+        for (const doorId of object.opens) {
+          this.openedDoors.add(this.doorKey(doorId));
+          this.world.openDoor(doorId);
+        }
+        this.openDialog('Рычаг', ['Со скрежетом дверь отъезжает в сторону.'], []);
+        return;
+      case 'door':
+        return;
     }
-    if (this.isChestOpened(object.id)) return;
-    this.setMode({ kind: 'reward', title: 'Сундук', options: object.choices, chestKey: this.chestKey(object.id) });
   }
 
   private battleAction(action: (battle: CardBattle) => ActionResult): ActionResult {
@@ -525,6 +577,7 @@ export class GameSession {
     }
     this.lastPortalKey = null;
     this.world.loadLevel(portal.toLevel, portal.toSpawn);
+    this.syncDoors();
     this.events.emit({ type: 'levelChanged', levelId: portal.toLevel });
     this.progress({ type: 'levelEntered', levelId: portal.toLevel });
   }

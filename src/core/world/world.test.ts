@@ -80,6 +80,33 @@ describe('WorldState', () => {
     expect(world.findInteractable()?.kind).toBe('npc');
   });
 
+  it('закрытая дверь непроходима, открытая — пропускает', () => {
+    const world = createWorld();
+    expect(world.objectAt(20, 3)?.id).toBe('garden_door');
+    expect(world.isDoorOpen('garden_door')).toBe(false);
+    const below = tileCenter({ x: 20, y: 4 });
+    world.player.x = below.x;
+    world.player.y = below.y;
+    run(world, 3000, 0, -1);
+    expect(world.playerTile).toEqual({ x: 20, y: 4 });
+
+    world.openDoor('garden_door');
+    expect(world.isDoorOpen('garden_door')).toBe(true);
+    run(world, 3000, 0, -1);
+    // За дверью сразу стоит табличка — она тоже непроходима, читать её можно от двери.
+    expect(world.playerTile).toEqual({ x: 20, y: 3 });
+    expect(world.findInteractable()).toMatchObject({ kind: 'object', object: { id: 'garden_sign' } });
+  });
+
+  it('загрузка уровня сбрасывает открытые двери до `setOpenDoors`', () => {
+    const world = createWorld();
+    world.openDoor('garden_door');
+    world.loadLevel('meadow');
+    expect(world.isDoorOpen('garden_door')).toBe(false);
+    world.setOpenDoors(new Set(['garden_door']));
+    expect(world.isDoorOpen('garden_door')).toBe(true);
+  });
+
   it('находит портал под игроком и загружает другой уровень', () => {
     const world = createWorld();
     const portal = tileCenter({ x: 27, y: 8 });

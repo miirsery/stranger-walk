@@ -33,6 +33,8 @@ export class WorldState {
   level: LevelDef;
   map: TileMap;
   readonly player: PlayerState;
+  /** id открытых дверей текущего уровня; сбрасывается при каждой загрузке уровня через `setOpenDoors`. */
+  private openDoors = new Set<string>();
 
   constructor(
     private readonly content: ContentRegistry,
@@ -51,6 +53,21 @@ export class WorldState {
     this.player.x = at.x;
     this.player.y = at.y;
     this.player.moving = false;
+    this.openDoors = new Set();
+  }
+
+  /** Отмечает, какие двери текущего уровня уже открыты (по id объекта). Вызывается сессией после загрузки уровня. */
+  setOpenDoors(ids: ReadonlySet<string>): void {
+    this.openDoors = new Set(ids);
+  }
+
+  /** Открывает одну дверь текущего уровня — сразу, без перезагрузки всего набора. */
+  openDoor(objectId: string): void {
+    this.openDoors.add(objectId);
+  }
+
+  isDoorOpen(objectId: string): boolean {
+    return this.openDoors.has(objectId);
   }
 
   /** Ставит игрока в точку (в пикселях). Возвращает false и ничего не меняет, если там стена. */
@@ -93,11 +110,13 @@ export class WorldState {
     return this.level.objects?.find((object) => object.at.x === tx && object.at.y === ty);
   }
 
-  /** Ближайшее в радиусе взаимодействия: NPC или объект. */
+  /** Ближайшее в радиусе взаимодействия: NPC или объект. Дверь — не объект взаимодействия, её открывает рычаг. */
   findInteractable(): Interactable | undefined {
     const candidates: { item: Interactable; at: Point }[] = [
       ...this.level.npcs.map((npc) => ({ item: { kind: 'npc', npc } as const, at: npc.at })),
-      ...(this.level.objects ?? []).map((object) => ({ item: { kind: 'object', object } as const, at: object.at })),
+      ...(this.level.objects ?? [])
+        .filter((object) => object.type !== 'door')
+        .map((object) => ({ item: { kind: 'object', object } as const, at: object.at })),
     ];
     let best: Interactable | undefined;
     let bestDistance = INTERACT_RANGE;
@@ -139,9 +158,16 @@ export class WorldState {
     const bottom = pixelToTile(y + PLAYER_HALF - 0.001);
     for (let ty = top; ty <= bottom; ty++) {
       for (let tx = left; tx <= right; tx++) {
-        if (this.map.isSolid(tx, ty) || this.npcAt(tx, ty) || this.objectAt(tx, ty)) return true;
+        if (this.map.isSolid(tx, ty) || this.npcAt(tx, ty)) return true;
+        const object = this.objectAt(tx, ty);
+        if (object && this.blocksMovement(object)) return true;
       }
     }
     return false;
+  }
+
+  /** Открытая дверь пропускает; остальные объекты (табличка, сундук, рычаг) непроходимы, как и раньше. */
+  private blocksMovement(object: WorldObjectDef): boolean {
+    return object.type !== 'door' || !this.openDoors.has(object.id);
   }
 }

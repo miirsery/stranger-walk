@@ -42,4 +42,26 @@ describe('контент игры', () => {
       expect(errors.some((error) => error.includes(part))).toBe(true);
     }
   });
+
+  it('валидатор проверяет двери и рычаги', () => {
+    const meadow = gameContent.levels.meadow;
+    if (!meadow) throw new Error('нет уровня meadow');
+    const errors = validateContent({
+      ...gameContent,
+      levels: {
+        ...gameContent.levels,
+        meadow: {
+          ...meadow,
+          objects: [
+            { id: 'orphan_door', type: 'door', at: { x: 2, y: 9 } },
+            { id: 'broken_lever', type: 'lever', at: { x: 4, y: 9 }, opens: ['nowhere'] },
+            { id: 'useless_lever', type: 'lever', at: { x: 6, y: 9 }, opens: [] },
+          ],
+        },
+      },
+    });
+    for (const part of ['никогда не открывается', 'неизвестная дверь', 'ничего не открывает']) {
+      expect(errors.some((error) => error.includes(part))).toBe(true);
+    }
+  });
 });

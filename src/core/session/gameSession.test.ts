@@ -415,4 +415,38 @@ describe('GameSession', () => {
       expect(restored.isChestOpened('stern_chest')).toBe(false);
     });
   });
+
+  describe('двери и рычаги', () => {
+    it('рычаг открывает дверь, которая была непроходима', () => {
+      const session = new GameSession(gameContent);
+      place(session, { x: 20, y: 4 });
+      expect(session.world.findInteractable()).toBeUndefined();
+      expect(session.isDoorOpen('garden_door')).toBe(false);
+
+      place(session, { x: 9, y: 7 });
+      expect(session.interactionPrompt()).toMatchObject({ verb: 'потянуть', name: 'Рычаг' });
+      session.interact();
+      skipDialog(session);
+      expect(session.isDoorOpen('garden_door')).toBe(true);
+      expect(session.interactionPrompt()).toBeNull();
+
+      place(session, { x: 20, y: 3 });
+      expect(session.interactionPrompt()).toMatchObject({ verb: 'прочитать', name: 'Табличка' });
+    });
+
+    it('открытая дверь сохраняется и восстанавливается, отдельно для каждого уровня', () => {
+      const session = new GameSession(gameContent);
+      place(session, { x: 9, y: 7 });
+      session.interact();
+      skipDialog(session);
+      const save = session.serialize();
+      expect(save.openedDoors).toEqual(['meadow:garden_door']);
+
+      const restored = GameSession.restore(gameContent, save);
+      expect(restored.isDoorOpen('garden_door')).toBe(true);
+      restored.cheatTeleport('submarine');
+      restored.cheatTeleport('meadow');
+      expect(restored.isDoorOpen('garden_door')).toBe(true);
+    });
+  });
 });

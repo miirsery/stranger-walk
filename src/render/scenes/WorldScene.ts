@@ -70,6 +70,28 @@ export class WorldScene extends Phaser.Scene {
       { color: INK, rects: [[3, 7, 10, 2]] },
       { color: 0x8a5a2b, rects: [[2, 9, 12, 5]] },
     ]);
+    ensureIconTexture(this, 'object-door', TILE_SIZE, TILE_SIZE, [
+      { color: INK, rects: [[1, 1, 14, 14]] },
+      { color: 0x5e3c1a, rects: [[2, 2, 12, 12]] },
+      { color: 0x8a5a2b, rects: [[2, 2, 2, 12], [12, 2, 2, 12], [2, 2, 12, 2], [2, 12, 12, 2]] },
+    ]);
+    ensureIconTexture(this, 'object-door-open', TILE_SIZE, TILE_SIZE, [
+      { color: INK, rects: [[1, 1, 14, 14]] },
+      { color: 0x3a2a18, rects: [[2, 2, 12, 12]] },
+      { color: 0x8a5a2b, rects: [[1, 1, 3, 14]] },
+    ]);
+    ensureIconTexture(this, 'object-lever', TILE_SIZE, TILE_SIZE, [
+      { color: INK, rects: [[5, 10, 6, 5]] },
+      { color: 0x8a5a2b, rects: [[6, 11, 4, 3]] },
+      { color: 0xc9a66b, rects: [[7, 2, 2, 10]] },
+      { color: 0xd94e4e, rects: [[5, 1, 6, 3]] },
+    ]);
+    ensureIconTexture(this, 'object-lever-pulled', TILE_SIZE, TILE_SIZE, [
+      { color: INK, rects: [[5, 10, 6, 5]] },
+      { color: 0x8a5a2b, rects: [[6, 11, 4, 3]] },
+      { color: 0xc9a66b, rects: [[2, 7, 10, 2]] },
+      { color: 0x6bdc6b, rects: [[1, 6, 4, 4]] },
+    ]);
 
     this.buildLevel();
     this.cameras.main.startFollow(this.player, true, CAMERA_LERP, CAMERA_LERP);
@@ -119,12 +141,27 @@ export class WorldScene extends Phaser.Scene {
     }
 
     for (const { sprite, object } of this.objectSprites) {
-      if (object.type === 'chest') {
-        sprite.setTexture(session.isChestOpened(object.id) ? 'object-chest-open' : 'object-chest');
+      if (object.type === 'chest' || object.type === 'door' || object.type === 'lever') {
+        sprite.setTexture(this.objectTextureKey(object));
       }
     }
 
     this.animateTiles();
+  }
+
+  /** Текстура объекта с учётом его текущего состояния (открыт сундук/дверь, потянут ли рычаг). */
+  private objectTextureKey(object: WorldObjectDef): string {
+    const { session } = this.ctx;
+    switch (object.type) {
+      case 'sign':
+        return 'object-sign';
+      case 'chest':
+        return session.isChestOpened(object.id) ? 'object-chest-open' : 'object-chest';
+      case 'door':
+        return session.isDoorOpen(object.id) ? 'object-door-open' : 'object-door';
+      case 'lever':
+        return object.opens.every((doorId) => session.isDoorOpen(doorId)) ? 'object-lever-pulled' : 'object-lever';
+    }
   }
 
   /** Переключает кадр «живых» тайлов (вода, звёзды, огни) два раза в секунду. */
@@ -180,8 +217,8 @@ export class WorldScene extends Phaser.Scene {
 
     for (const object of world.level.objects ?? []) {
       const center = tileCenter(object.at);
-      const key = object.type === 'sign' ? 'object-sign' : 'object-chest';
-      this.objectSprites.push({ sprite: this.add.image(center.x, center.y, key).setDepth(4), object });
+      const sprite = this.add.image(center.x, center.y, this.objectTextureKey(object)).setDepth(4);
+      this.objectSprites.push({ sprite, object });
     }
 
     this.cameras.main.setBackgroundColor(tileMap.setting.backgroundColor);
