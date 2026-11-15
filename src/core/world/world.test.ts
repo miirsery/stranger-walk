@@ -5,6 +5,7 @@ import { TILE_SIZE, tileCenter } from './tileMap';
 import { WorldState } from './world';
 
 const createWorld = (): WorldState => new WorldState(new ContentRegistry(gameContent), 'meadow');
+const createSubmarine = (): WorldState => new WorldState(new ContentRegistry(gameContent), 'submarine');
 
 const run = (world: WorldState, ms: number, x: number, y: number): void => {
   for (let elapsed = 0; elapsed < ms; elapsed += 16) world.update(16, { x, y });
@@ -105,6 +106,39 @@ describe('WorldState', () => {
     expect(world.isDoorOpen('garden_door')).toBe(false);
     world.setOpenDoors(new Set(['garden_door']));
     expect(world.isDoorOpen('garden_door')).toBe(true);
+  });
+
+  it('NPC без маршрута не двигается', () => {
+    const world = createWorld();
+    const elder = tileCenter({ x: 5, y: 7 });
+    run(world, 2000, 0, 0);
+    expect(world.npcView(0)).toMatchObject({ x: elder.x, y: elder.y, moving: false });
+  });
+
+  it('NPC с маршрутом идёт туда-обратно между точками маршрута', () => {
+    const world = createSubmarine();
+    const engineer = 1;
+    const start = tileCenter({ x: 25, y: 2 });
+    const far = tileCenter({ x: 21, y: 2 });
+    const near = (x: number, target: number): boolean => Math.abs(x - target) <= 2;
+    expect(world.npcView(engineer)).toMatchObject({ x: start.x, y: start.y, moving: false });
+
+    run(world, 1600, 0, 0);
+    expect(near(world.npcView(engineer).x, far.x)).toBe(true);
+    expect(world.npcView(engineer).facing).toBe('left');
+
+    run(world, 1600, 0, 0);
+    expect(near(world.npcView(engineer).x, start.x)).toBe(true);
+    expect(world.npcView(engineer).facing).toBe('right');
+  });
+
+  it('патрулирующий NPC непроходим в своём текущем (а не стартовом) положении', () => {
+    const world = createSubmarine();
+    run(world, 800, 0, 0);
+    const view = world.npcView(1);
+    const tile = { x: Math.floor(view.x / TILE_SIZE), y: Math.floor(view.y / TILE_SIZE) };
+    expect(world.npcAt(tile.x, tile.y)?.npcId).toBe('engineer');
+    expect(world.npcAt(25, 2)).toBeUndefined();
   });
 
   it('находит портал под игроком и загружает другой уровень', () => {

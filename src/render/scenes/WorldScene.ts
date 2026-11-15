@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import type { Point, WorldObjectDef } from '@core/content/types';
+import type { WorldObjectDef } from '@core/content/types';
 import type { SessionEvent } from '@core/session/gameSession';
 import { TILE_SIZE, tileCenter } from '@core/world/tileMap';
 import type { RenderContext } from '../context';
@@ -27,7 +27,7 @@ export class WorldScene extends Phaser.Scene {
   private map: Phaser.Tilemaps.Tilemap | null = null;
   private player!: Phaser.GameObjects.Sprite;
   private prompt!: Phaser.GameObjects.Image;
-  private npcSprites: { sprite: Phaser.GameObjects.Sprite; at: Point }[] = [];
+  private npcSprites: { sprite: Phaser.GameObjects.Sprite; index: number }[] = [];
   private objectSprites: { sprite: Phaser.GameObjects.Image; object: WorldObjectDef }[] = [];
   /** Тайлы с анимацией: позиция и индекс первого кадра. */
   private animatedTiles: { x: number; y: number; index: number }[] = [];
@@ -127,17 +127,18 @@ export class WorldScene extends Phaser.Scene {
       this.prompt.setPosition(center.x, center.y - TILE_SIZE - bob);
     }
 
-    // NPC поворачиваются к игроку, когда он рядом.
-    for (const { sprite, at } of this.npcSprites) {
-      const center = tileCenter(at);
-      const dx = state.x - center.x;
-      const dy = state.y - center.y;
-      let facing: Facing = 'down';
+    // Патрулирующие NPC идут по маршруту; у игрока рядом — поворачиваются к нему, а не идут дальше по курсу.
+    for (const { sprite, index } of this.npcSprites) {
+      const view = session.world.npcView(index);
+      sprite.setPosition(Math.round(view.x), Math.round(view.y) - 2);
+      const dx = state.x - view.x;
+      const dy = state.y - view.y;
+      let facing: Facing = view.facing;
       if (Math.hypot(dx, dy) <= NPC_NOTICE_RANGE) {
-        if (Math.abs(dx) > Math.abs(dy)) facing = dx > 0 ? 'right' : 'left';
-        else facing = dy > 0 ? 'down' : 'up';
+        facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
       }
-      sprite.setFrame(characterFrame(facing, 0));
+      const npcStep = view.moving && Math.floor(this.time.now / STEP_FRAME_MS) % 2 === 1 ? 1 : 0;
+      sprite.setFrame(characterFrame(facing, npcStep));
     }
 
     for (const { sprite, object } of this.objectSprites) {
@@ -207,13 +208,13 @@ export class WorldScene extends Phaser.Scene {
     if (!tileset) throw new Error(`Тайлсет ${tilesKey} не создан`);
     this.map.createLayer(0, tileset, 0, 0)?.setDepth(0);
 
-    for (const placement of world.level.npcs) {
+    world.level.npcs.forEach((placement, index) => {
       const npc = content.npc(placement.npcId);
       const key = ensureCharacterTexture(this, `char-${npc.id}`, npc.look);
-      const center = tileCenter(placement.at);
-      const sprite = this.add.sprite(center.x, center.y - 2, key, characterFrame('down', 0)).setDepth(5);
-      this.npcSprites.push({ sprite, at: placement.at });
-    }
+      const view = world.npcView(index);
+      const sprite = this.add.sprite(view.x, view.y - 2, key, characterFrame(view.facing, 0)).setDepth(5);
+      this.npcSprites.push({ sprite, index });
+    });
 
     for (const object of world.level.objects ?? []) {
       const center = tileCenter(object.at);

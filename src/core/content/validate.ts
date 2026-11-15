@@ -98,6 +98,9 @@ export const validateContent = (content: GameContent): string[] => {
     for (const placement of level.npcs) {
       need(content.npcs, 'NPC', placement.npcId, where);
       if (!walkable(level, setting, placement.at)) errors.push(`${where}: NPC ${placement.npcId} стоит в стене`);
+      for (const point of placement.patrol ?? []) {
+        if (!walkable(level, setting, point)) errors.push(`${where}: маршрут NPC ${placement.npcId} ведёт в стену`);
+      }
     }
     for (const portal of level.portals) {
       if (!walkable(level, setting, portal.at)) errors.push(`${where}: портал (${portal.at.x},${portal.at.y}) недоступен`);

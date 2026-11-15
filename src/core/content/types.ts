@@ -82,6 +82,8 @@ export interface NpcDef {
 export interface NpcPlacement {
   npcId: NpcId;
   at: Point;
+  /** Точки маршрута после `at` — NPC обходит их по очереди и возвращается назад (туда-обратно). */
+  patrol?: Point[];
 }
 
 export interface PortalDef {

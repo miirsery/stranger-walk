@@ -79,7 +79,7 @@ export const levels: Record<string, LevelDef> = {
     spawn: { x: 1, y: 2 },
     npcs: [
       { npcId: 'captain', at: { x: 3, y: 6 } },
-      { npcId: 'engineer', at: { x: 25, y: 2 } },
+      { npcId: 'engineer', at: { x: 25, y: 2 }, patrol: [{ x: 21, y: 2 }] },
     ],
     portals: [
       { at: { x: 0, y: 2 }, toLevel: 'meadow', toSpawn: { x: 26, y: 8 } },
