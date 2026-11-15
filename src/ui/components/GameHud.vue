@@ -7,6 +7,7 @@ const props = defineProps<{
   quests: QuestView[];
   cardTotal: number;
   deckSize: number;
+  coins: number;
 }>();
 
 defineEmits<{ openDeck: []; openJournal: [] }>();
@@ -41,6 +42,10 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
       </span>
       <span v-if="completed > 0" class="hud__empty">Выполнено квестов: {{ completed }}</span>
     </button>
+    <span class="hud__coins pixel-panel" :aria-label="`Монет: ${coins}`" title="Монеты — трать у торговца">
+      <span class="hud__coins-icon" aria-hidden="true" />
+      <span>{{ coins }}</span>
+    </span>
     <button
       type="button"
       class="hud__cards pixel-panel"
@@ -112,6 +117,24 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
   color: var(--green);
 }
 
+.hud__coins {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  font-size: 9px;
+  color: var(--gold);
+  background: rgb(42 37 64 / 88%);
+}
+
+.hud__coins-icon {
+  width: 12px;
+  height: 12px;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
 .hud__cards {
   display: flex;
   gap: 8px;
@@ -141,8 +164,10 @@ const completed = computed(() => props.quests.filter((quest) => quest.status ===
   color: var(--muted);
 }
 
-/* Телефон: панель квестов сжата до текущей цели, чтобы не закрывать мир и не лезть под уведомления. */
+/* Телефон: панель квестов сжата до текущей цели, чтобы не закрывать мир и не лезть под уведомления.
+   Счётчик монет уступает место — баланс виден в лавке торговца, когда он нужен. */
 @media (width <= 600px), (height <= 480px) {
+  .hud__coins,
   .hud__deck,
   .hud__objective--done,
   .hud__quest ~ .hud__quest,

@@ -64,4 +64,25 @@ describe('контент игры', () => {
       expect(errors.some((error) => error.includes(part))).toBe(true);
     }
   });
+
+  it('валидатор проверяет предложения торговца', () => {
+    const trader = gameContent.npcs.trader;
+    if (!trader) throw new Error('нет NPC trader');
+    const errors = validateContent({
+      ...gameContent,
+      npcs: {
+        ...gameContent.npcs,
+        trader: {
+          ...trader,
+          scripts: [
+            { lines: ['...'], effects: [{ type: 'openTrade', offers: [] }] },
+            { lines: ['...'], effects: [{ type: 'openTrade', offers: [{ cardId: 'unicorn', price: 0 }] }] },
+          ],
+        },
+      },
+    });
+    for (const part of ['ничего не продаёт', '«unicorn»', 'больше нуля']) {
+      expect(errors.some((error) => error.includes(part))).toBe(true);
+    }
+  });
 });

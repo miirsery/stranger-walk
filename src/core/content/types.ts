@@ -57,12 +57,19 @@ export type Condition =
   | { type: 'questStatus'; questId: QuestId; status: QuestStatus }
   | { type: 'bossDefeated'; bossId: BossId; value: boolean };
 
+/** Предложение торговца: карта за столько-то монет. */
+export interface TradeOffer {
+  cardId: CardId;
+  price: number;
+}
+
 /** Действия, которые запускаются после диалога. */
 export type Effect =
   | { type: 'startQuest'; questId: QuestId }
   | { type: 'startMinigame'; minigameId: MinigameId }
   | { type: 'startBattle'; bossId: BossId }
-  | { type: 'grantCards'; cardIds: CardId[] };
+  | { type: 'grantCards'; cardIds: CardId[] }
+  | { type: 'openTrade'; offers: TradeOffer[] };
 
 export interface NpcScript {
   /** Все условия должны выполняться. Без условий — сценарий подходит всегда. */

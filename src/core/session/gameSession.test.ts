@@ -449,4 +449,65 @@ describe('GameSession', () => {
       expect(restored.isDoorOpen('garden_door')).toBe(true);
     });
   });
+
+  describe('торговец и монеты', () => {
+    const winHarvest = (session: GameSession): void => {
+      place(session, { x: 19, y: 14 });
+      session.interact();
+      skipDialog(session);
+      winMinigame(session);
+    };
+
+    it('победа в мини-игре приносит монеты каждый раз, а не только за первую', () => {
+      const session = new GameSession(gameContent, { seed: 3 });
+      expect(session.coins).toBe(0);
+      talk(session, { x: 5, y: 8 });
+
+      winHarvest(session);
+      expect(session.coins).toBe(10);
+      session.interact();
+      expect(session.mode.kind).toBe('reward');
+      takeChoice(session);
+      expect(session.mode.kind).toBe('world');
+
+      winHarvest(session);
+      expect(session.coins).toBe(20);
+      session.interact();
+      expect(session.mode.kind).toBe('world');
+    });
+
+    it('у торговца можно купить карту, пока хватает монет', () => {
+      const session = new GameSession(gameContent, { seed: 3 });
+      talk(session, { x: 5, y: 8 });
+      winHarvest(session);
+      session.interact();
+      takeChoice(session);
+      winHarvest(session);
+      session.interact();
+      expect(session.coins).toBe(20);
+
+      talk(session, { x: 23, y: 12 });
+      expect(session.mode.kind).toBe('trade');
+      expect(session.buyCard(2)).toEqual({ ok: false, reason: 'Не хватает монет' });
+      expect(session.buyCard(1)).toEqual({ ok: true });
+      expect(session.coins).toBe(8);
+      expect(session.cards.count('ghost')).toBe(1);
+      // Лавка не закрывается после покупки — можно взять ещё, пока хватает монет.
+      expect(session.mode.kind).toBe('trade');
+      expect(session.buyCard(0)).toEqual({ ok: false, reason: 'Не хватает монет' });
+
+      session.leaveTrade();
+      expect(session.mode.kind).toBe('world');
+    });
+
+    it('монеты сохраняются и восстанавливаются', () => {
+      const session = new GameSession(gameContent, { seed: 3 });
+      talk(session, { x: 5, y: 8 });
+      winHarvest(session);
+      const save = session.serialize();
+      expect(save.coins).toBe(10);
+      const restored = GameSession.restore(gameContent, save);
+      expect(restored.coins).toBe(10);
+    });
+  });
 });

@@ -12,6 +12,7 @@ import type {
   MinigameDef,
   Point,
   QuestDef,
+  TradeOffer,
   WorldObjectDef,
 } from '../content/types';
 import type { AnyMinigame } from '../minigames/minigame';
@@ -45,7 +46,9 @@ export type Mode =
   | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame; phase: MinigamePhase; wonBefore: boolean }
   | { kind: 'battle'; boss: BossDef; battle: CardBattle }
   /** Выбор одной карты из нескольких (сундук). */
-  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; then?: () => void };
+  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; then?: () => void }
+  /** Лавка торговца: можно купить любую из карт за монеты, пока не надоест. */
+  | { kind: 'trade'; offers: TradeOffer[] };
 
 /** Подсказка о том, с чем сейчас можно взаимодействовать. */
 export interface InteractionPrompt {
@@ -62,6 +65,7 @@ export type SessionEvent =
   | { type: 'questUpdated'; quest: QuestDef }
   | { type: 'questCompleted'; quest: QuestDef }
   | { type: 'cardsGranted'; cardIds: CardId[] }
+  | { type: 'coinsGranted'; amount: number }
   | { type: 'minigameStarted'; minigameId: string }
   | { type: 'minigameFinished'; minigameId: string; won: boolean }
   | { type: 'battleUpdated' }
@@ -74,6 +78,8 @@ export interface SessionOptions {
 const SYSTEM_SPEAKER = '';
 /** Сколько копий каждой карты выдаёт отладочная команда «все карты». */
 const CHEAT_COPIES = 2;
+/** Монеты за победу в мини-игре — каждый раз, не только за первую. */
+const MINIGAME_WIN_COINS = 10;
 /** Ограничение шага, чтобы после «подвисшей» вкладки персонаж не пролетал сквозь стены. */
 const MAX_STEP_MS = 50;
 
@@ -101,6 +107,7 @@ export class GameSession {
   /** Карты на выбор за только что выигранную мини-игру: предлагаются при выходе с экрана итога. */
   private pendingMinigameChoices: CardId[] | null = null;
   private readonly rng: Rng;
+  private coinCount = 0;
 
   constructor(content: GameContent, options: SessionOptions = {}) {
     this.content = new ContentRegistry(content);
@@ -131,6 +138,7 @@ export class GameSession {
     for (const key of save.openedChests) session.openedChests.add(key);
     for (const key of save.openedDoors) session.openedDoors.add(key);
     session.syncDoors();
+    session.coinCount = save.coins;
     return session;
   }
 
@@ -153,11 +161,16 @@ export class GameSession {
       wonMinigames: [...this.wonMinigames],
       openedChests: [...this.openedChests],
       openedDoors: [...this.openedDoors],
+      coins: this.coinCount,
     };
   }
 
   get mode(): Mode {
     return this.currentMode;
+  }
+
+  get coins(): number {
+    return this.coinCount;
   }
 
   /** Шаг игрового цикла. Вызывается рендером каждый кадр. */
@@ -530,6 +543,9 @@ export class GameSession {
         this.events.emit({ type: 'battleUpdated' });
         break;
       }
+      case 'openTrade':
+        this.setMode({ kind: 'trade', offers: effect.offers });
+        break;
     }
   }
 
@@ -539,6 +555,7 @@ export class GameSession {
     const won = mode.game.status === 'won';
     mode.phase = 'finished';
     this.events.emit({ type: 'minigameFinished', minigameId: def.id, won });
+    if (won) this.addCoins(MINIGAME_WIN_COINS);
     if (won && !this.wonMinigames.has(def.id)) {
       this.wonMinigames.add(def.id);
       this.grantCards(def.rewardCards);
@@ -547,10 +564,32 @@ export class GameSession {
     }
   }
 
+  /** Купить карту у торговца за монеты — пока в лавке, можно взять сколько угодно. */
+  buyCard(index: number): ActionResult {
+    const mode = this.currentMode;
+    if (mode.kind !== 'trade') return { ok: false, reason: 'Лавка закрыта' };
+    const offer = mode.offers[index];
+    if (!offer) return { ok: false, reason: 'Нет такого товара' };
+    if (offer.price > this.coinCount) return { ok: false, reason: 'Не хватает монет' };
+    this.coinCount -= offer.price;
+    this.grantCards([offer.cardId]);
+    return { ok: true };
+  }
+
+  /** Закрыть лавку и вернуться в мир. */
+  leaveTrade(): void {
+    if (this.currentMode.kind === 'trade') this.setMode({ kind: 'world' });
+  }
+
   private grantCards(cardIds: CardId[]): void {
     if (cardIds.length === 0) return;
     for (const cardId of cardIds) this.cards.add(cardId);
     this.events.emit({ type: 'cardsGranted', cardIds });
+  }
+
+  private addCoins(amount: number): void {
+    this.coinCount += amount;
+    this.events.emit({ type: 'coinsGranted', amount });
   }
 
   private progress(event: ProgressEvent): void {

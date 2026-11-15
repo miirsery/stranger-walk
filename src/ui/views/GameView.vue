@@ -15,6 +15,7 @@ import MinigameHud from '../components/MinigameHud.vue';
 import PauseMenu from '../components/PauseMenu.vue';
 import RewardOverlay from '../components/RewardOverlay.vue';
 import TouchControls from '../components/TouchControls.vue';
+import TradeOverlay from '../components/TradeOverlay.vue';
 import { useGame } from '../composables/useGame';
 import { useSettingsStore } from '../stores/settings';
 
@@ -23,7 +24,27 @@ const route = useRoute();
 const router = useRouter();
 const game = useGame(container, { storage: localSaveStorage, continueGame: route.query.continue === '1' });
 const debug = isDebugEnabled();
-const { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, interactTarget, rewardOptions } = game;
+const {
+  session,
+  input,
+  modeKind,
+  minigameType,
+  minigamePhase,
+  loading,
+  levelName,
+  dialog,
+  battle,
+  quests,
+  cardTotal,
+  deckSize,
+  coins,
+  toasts,
+  paused,
+  panel,
+  interactTarget,
+  rewardOptions,
+  tradeOffers,
+} = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -64,11 +85,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
     <!-- Весь интерфейс поверх канваса: масштабируется настройкой «Размер интерфейса». -->
     <div class="game__ui ui-scale" :class="{ 'game__ui--touch': showTouch }">
       <GameHud
-        v-if="modeKind === 'world' || modeKind === 'dialog' || modeKind === 'reward'"
+        v-if="modeKind === 'world' || modeKind === 'dialog' || modeKind === 'reward' || modeKind === 'trade'"
         :level-name="levelName"
         :quests="quests"
         :card-total="cardTotal"
         :deck-size="deckSize"
+        :coins="coins"
         @open-deck="game.setPanel('deck')"
         @open-journal="game.setPanel('journal')"
       />
@@ -81,6 +103,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       </p>
       <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
       <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" :can-decline="rewardOptions.canDecline" />
+      <TradeOverlay v-if="tradeOffers" :session="session" :offers="tradeOffers" :coins="coins" />
 
       <ul class="game__toasts" aria-live="polite">
         <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>

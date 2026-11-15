@@ -33,6 +33,7 @@ export const levels: Record<string, LevelDef> = {
     npcs: [
       { npcId: 'elder', at: { x: 5, y: 7 } },
       { npcId: 'farmer', at: { x: 19, y: 13 } },
+      { npcId: 'trader', at: { x: 23, y: 11 } },
     ],
     portals: [
       {

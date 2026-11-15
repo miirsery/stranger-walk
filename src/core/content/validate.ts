@@ -52,6 +52,13 @@ export const validateContent = (content: GameContent): string[] => {
         case 'grantCards':
           needCards(effect.cardIds, where);
           break;
+        case 'openTrade':
+          if (effect.offers.length === 0) errors.push(`${where}: торговец ничего не продаёт`);
+          for (const offer of effect.offers) {
+            need(content.cards, 'карта', offer.cardId, where);
+            if (offer.price <= 0) errors.push(`${where}: цена «${offer.cardId}» должна быть больше нуля`);
+          }
+          break;
       }
     }
   };

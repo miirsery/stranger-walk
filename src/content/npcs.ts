@@ -119,6 +119,26 @@ export const npcs: Record<string, NpcDef> = {
       },
     ],
   },
+  trader: {
+    id: 'trader',
+    name: 'Торговка Лина',
+    look: { body: 0x8a5a2b, skin: 0xe0ac7e, hat: 0xd94e4e },
+    scripts: [
+      {
+        lines: ['Монеты из мини-игр без дела не лежат — у меня на них меняют карты.', 'Смотри, что есть.'],
+        effects: [
+          {
+            type: 'openTrade',
+            offers: [
+              { cardId: 'bull', price: 20 },
+              { cardId: 'ghost', price: 12 },
+              { cardId: 'knight', price: 25 },
+            ],
+          },
+        ],
+      },
+    ],
+  },
   keeper: {
     id: 'keeper',
     name: 'Хранитель Колоды',

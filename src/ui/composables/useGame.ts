@@ -2,7 +2,7 @@ import type { Ref, ShallowRef } from 'vue';
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { gameContent } from '@content/index';
 import type { BattleState } from '@core/battle/cardBattle';
-import type { MinigameDef } from '@core/content/types';
+import type { MinigameDef, TradeOffer } from '@core/content/types';
 import type { QuestView } from '@core/quests/questLog';
 import type { DialogState, MinigamePhase, Mode, SessionEvent } from '@core/session/gameSession';
 import { GameSession } from '@core/session/gameSession';
@@ -32,6 +32,7 @@ export interface GameBridge {
   quests: ShallowRef<QuestView[]>;
   cardTotal: Ref<number>;
   deckSize: Ref<number>;
+  coins: Ref<number>;
   toasts: Ref<Toast[]>;
   paused: Ref<boolean>;
   /** Открытая поверх мира панель: редактор колоды или журнал. */
@@ -44,6 +45,8 @@ export interface GameBridge {
   interactTarget: Ref<{ verb: string; name: string } | null>;
   /** Карты, из которых предлагается выбрать одну (сундук), или null. */
   rewardOptions: ShallowRef<{ title: string; options: string[]; canDecline: boolean } | null>;
+  /** Открытая лавка торговца, или null. */
+  tradeOffers: ShallowRef<TradeOffer[] | null>;
   /** Записать прогресс прямо сейчас (помимо автосохранения). */
   saveNow: () => void;
 }
@@ -82,11 +85,13 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
   const quests = shallowRef<QuestView[]>([]);
   const cardTotal = ref(0);
   const deckSize = ref(0);
+  const coins = ref(0);
   const toasts = ref<Toast[]>([]);
   const paused = ref(false);
   const panel = ref<GamePanel | null>(null);
   const interactTarget = ref<{ verb: string; name: string } | null>(null);
   const rewardOptions = shallowRef<{ title: string; options: string[]; canDecline: boolean } | null>(null);
+  const tradeOffers = shallowRef<TradeOffer[] | null>(null);
 
   let handle: GameHandle | null = null;
   let nextToastId = 1;
@@ -112,9 +117,11 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     dialog.value = mode.kind === 'dialog' ? { ...mode.dialog } : null;
     battle.value = mode.kind === 'battle' ? mode.battle.snapshot() : null;
     rewardOptions.value = mode.kind === 'reward' ? { title: mode.title, options: [...mode.options], canDecline: mode.chestKey !== null } : null;
+    tradeOffers.value = mode.kind === 'trade' ? [...mode.offers] : null;
     quests.value = session.quests.list();
     cardTotal.value = session.cards.total;
     deckSize.value = session.cards.deck.length;
+    coins.value = session.coins;
   };
 
   // Снимок не содержит состояния боя и мини-игры, поэтому сохранять можно в любой момент:
@@ -140,6 +147,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
       const names = event.cardIds.map((id) => session.content.card(id).name).join(', ');
       toast(`Получены карты: ${names}`);
     }
+    if (event.type === 'coinsGranted') toast(`Получено монет: ${event.amount}`);
   };
 
   // Мир замирает и на паузе, и пока открыта панель.
@@ -205,5 +213,29 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     audio.playTrack(null);
   });
 
-  return { session, input, modeKind, minigameType, minigamePhase, loading, levelName, dialog, battle, quests, cardTotal, deckSize, toasts, paused, panel, setPaused, setPanel, refresh, interactTarget, rewardOptions, saveNow };
+  return {
+    session,
+    input,
+    modeKind,
+    minigameType,
+    minigamePhase,
+    loading,
+    levelName,
+    dialog,
+    battle,
+    quests,
+    cardTotal,
+    deckSize,
+    coins,
+    toasts,
+    paused,
+    panel,
+    setPaused,
+    setPanel,
+    refresh,
+    interactTarget,
+    rewardOptions,
+    tradeOffers,
+    saveNow,
+  };
 };

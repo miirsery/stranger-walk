@@ -26,6 +26,8 @@ export interface SaveData {
   openedChests: string[];
   /** Открытые двери в виде «уровень:объект». */
   openedDoors: string[];
+  /** Монеты, заработанные в мини-играх — тратятся у торговца. */
+  coins: number;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -78,5 +80,6 @@ export const parseSave = (raw: unknown): SaveData | null => {
     // Эти поля появились позже остальных: в старых сохранениях их нет.
     openedChests: isStringArray(raw.openedChests) ? raw.openedChests : [],
     openedDoors: isStringArray(raw.openedDoors) ? raw.openedDoors : [],
+    coins: typeof raw.coins === 'number' && Number.isInteger(raw.coins) && raw.coins >= 0 ? raw.coins : 0,
   };
 };
