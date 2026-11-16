@@ -319,6 +319,8 @@ export interface PlayerDef {
 export interface StoryChapter {
   title: string;
   text: string;
+  /** Если задано — глава показывается заставкой при первом входе в этот уровень. */
+  levelId?: LevelId;
 }
 
 export interface HintDef {

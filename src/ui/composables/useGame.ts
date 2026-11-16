@@ -49,6 +49,8 @@ export interface GameBridge {
   tradeOffers: ShallowRef<TradeOffer[] | null>;
   /** Финальная сцена после победы над последним боссом, или null. */
   finale: ShallowRef<{ title: string; lines: string[] } | null>;
+  /** Вступительная сцена уровня (глава из журнала при первом входе), или null. */
+  scene: ShallowRef<{ title: string; text: string } | null>;
   /** Записать прогресс прямо сейчас (помимо автосохранения). */
   saveNow: () => void;
 }
@@ -95,6 +97,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
   const rewardOptions = shallowRef<{ title: string; options: string[]; canDecline: boolean } | null>(null);
   const tradeOffers = shallowRef<TradeOffer[] | null>(null);
   const finale = shallowRef<{ title: string; lines: string[] } | null>(null);
+  const scene = shallowRef<{ title: string; text: string } | null>(null);
 
   let handle: GameHandle | null = null;
   let nextToastId = 1;
@@ -122,6 +125,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     rewardOptions.value = mode.kind === 'reward' ? { title: mode.title, options: [...mode.options], canDecline: mode.chestKey !== null } : null;
     tradeOffers.value = mode.kind === 'trade' ? [...mode.offers] : null;
     finale.value = mode.kind === 'finale' ? { title: mode.title, lines: [...mode.lines] } : null;
+    scene.value = mode.kind === 'scene' ? { title: mode.title, text: mode.text } : null;
     quests.value = session.quests.list();
     cardTotal.value = session.cards.total;
     deckSize.value = session.cards.deck.length;
@@ -241,6 +245,7 @@ export const useGame = (container: Ref<HTMLElement | null>, options: GameOptions
     rewardOptions,
     tradeOffers,
     finale,
+    scene,
     saveNow,
   };
 };

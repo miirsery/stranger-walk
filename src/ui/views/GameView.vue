@@ -15,6 +15,7 @@ import MemoryBoard from '../components/MemoryBoard.vue';
 import MinigameHud from '../components/MinigameHud.vue';
 import PauseMenu from '../components/PauseMenu.vue';
 import RewardOverlay from '../components/RewardOverlay.vue';
+import StorySceneOverlay from '../components/StorySceneOverlay.vue';
 import TouchControls from '../components/TouchControls.vue';
 import TradeOverlay from '../components/TradeOverlay.vue';
 import { useGame } from '../composables/useGame';
@@ -46,6 +47,7 @@ const {
   rewardOptions,
   tradeOffers,
   finale,
+  scene,
 } = game;
 const settings = useSettingsStore();
 
@@ -87,7 +89,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
     <!-- Весь интерфейс поверх канваса: масштабируется настройкой «Размер интерфейса». -->
     <div class="game__ui ui-scale" :class="{ 'game__ui--touch': showTouch }">
       <GameHud
-        v-if="modeKind === 'world' || modeKind === 'dialog' || modeKind === 'reward' || modeKind === 'trade'"
+        v-if="modeKind === 'world' || modeKind === 'dialog' || modeKind === 'reward' || modeKind === 'trade' || modeKind === 'scene'"
         :level-name="levelName"
         :quests="quests"
         :card-total="cardTotal"
@@ -104,6 +106,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
         <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> <span class="game__hint-verb">{{ interactTarget.verb }}:</span> {{ interactTarget.name }}
       </p>
       <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
+      <StorySceneOverlay v-if="scene" :title="scene.title" :text="scene.text" @close="session.leaveScene()" />
       <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" :can-decline="rewardOptions.canDecline" />
       <TradeOverlay v-if="tradeOffers" :session="session" :offers="tradeOffers" :coins="coins" />
       <FinaleOverlay v-if="finale" :title="finale.title" :lines="finale.lines" @close="session.leaveFinale()" />

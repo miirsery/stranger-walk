@@ -8,7 +8,16 @@ import { GameSession } from './gameSession';
 
 const idle = { x: 0, y: 0 };
 
+/** Создаёт сессию и сразу закрывает вступительную сцену стартового уровня — тесты её не проверяют. */
+const createSession = (...args: ConstructorParameters<typeof GameSession>): GameSession => {
+  const instance = new GameSession(...args);
+  instance.leaveScene();
+  return instance;
+};
+
 const place = (session: GameSession, tile: Point): void => {
+  // Вступительная сцена уровня (если есть) не мешает тестам передвижения — закрываем её.
+  session.leaveScene();
   const center = tileCenter(tile);
   session.world.player.x = center.x;
   session.world.player.y = center.y;
@@ -76,7 +85,7 @@ const solveMemory = (session: GameSession): void => {
 
 describe('GameSession', () => {
   it('стартует в мире со стартовой колодой и без квестов', () => {
-    const session = new GameSession(gameContent);
+    const session = createSession(gameContent);
     expect(session.mode.kind).toBe('world');
     expect(session.world.level.id).toBe('meadow');
     expect(session.cards.deck).toHaveLength(8);
@@ -84,7 +93,7 @@ describe('GameSession', () => {
   });
 
   it('диалог с NPC выдаёт квест после последней реплики', () => {
-    const session = new GameSession(gameContent);
+    const session = createSession(gameContent);
     const events = record(session);
     place(session, { x: 5, y: 8 });
     session.interact();
@@ -97,7 +106,7 @@ describe('GameSession', () => {
   });
 
   it('в диалоге мир стоит на паузе', () => {
-    const session = new GameSession(gameContent);
+    const session = createSession(gameContent);
     place(session, { x: 5, y: 8 });
     session.interact();
     const { x } = session.world.player;
@@ -106,7 +115,7 @@ describe('GameSession', () => {
   });
 
   it('звёздные врата закрыты, пока Хранитель не побеждён', () => {
-    const session = new GameSession(gameContent);
+    const session = createSession(gameContent);
     session.world.loadLevel('castle');
     place(session, { x: 19, y: 2 });
     expect(session.world.level.id).toBe('castle');
@@ -114,7 +123,7 @@ describe('GameSession', () => {
   });
 
   it('закрытый портал не пропускает и объясняет почему', () => {
-    const session = new GameSession(gameContent);
+    const session = createSession(gameContent);
     place(session, { x: 27, y: 8 });
     expect(session.world.level.id).toBe('meadow');
     expect(session.mode.kind).toBe('dialog');
@@ -124,7 +133,7 @@ describe('GameSession', () => {
   });
 
   it('полное прохождение MVP: квесты → мини-игра → карты → бой с боссом', () => {
-    const session = new GameSession(gameContent, { seed: 3 });
+    const session = createSession(gameContent, { seed: 3 });
     const events = record(session);
 
     // Луга: квест у старейшины, мини-игра у фермера.
@@ -198,7 +207,7 @@ describe('GameSession', () => {
 
   it('победа над боссом закрывает квест и выдаёт награды', () => {
     const keeper = new ContentRegistry(gameContent).boss('keeper');
-    const session = new GameSession({ ...gameContent, bosses: { ...gameContent.bosses, keeper: { ...keeper, health: 1 } } }, { seed: 5 });
+    const session = createSession({ ...gameContent, bosses: { ...gameContent.bosses, keeper: { ...keeper, health: 1 } } }, { seed: 5 });
     const events = record(session);
     session.world.loadLevel('castle');
     // Квест берём напрямую: путь до него проверен в предыдущем тесте.
@@ -242,7 +251,7 @@ describe('GameSession', () => {
 
   it('победа над последним боссом показывает финальную сцену, а не возврат в мир', () => {
     const captain = new ContentRegistry(gameContent).boss('void_captain');
-    const session = new GameSession(
+    const session = createSession(
       { ...gameContent, bosses: { ...gameContent.bosses, void_captain: { ...captain, health: 1 } } },
       { seed: 7 },
     );
@@ -283,10 +292,47 @@ describe('GameSession', () => {
     expect(session.mode.kind).toBe('world');
   });
 
+  it('вступительная сцена уровня показывается один раз при первом входе в мир', () => {
+    // Новая игра начинается со сцены стартового уровня — до первого же действия игрока.
+    const session = new GameSession(gameContent, { seed: 9 });
+    const mode = session.mode;
+    if (mode.kind !== 'scene') throw new Error(`ожидалась вступительная сцена, а не ${mode.kind}`);
+    expect(mode.title).toBe('Глава 1. Тихие луга');
+    session.leaveScene();
+    expect(session.mode.kind).toBe('world');
+
+    talk(session, { x: 5, y: 8 });
+    place(session, { x: 19, y: 14 });
+    session.interact();
+    skipDialog(session);
+    session.cheatWinMinigame();
+    session.interact();
+    takeChoice(session);
+
+    // Подлодка — новый уровень: сцена показывается при входе в неё впервые.
+    place(session, { x: 27, y: 8 });
+    expect(session.world.level.id).toBe('submarine');
+    const submarineMode = session.mode;
+    if (submarineMode.kind !== 'scene') throw new Error(`ожидалась сцена подлодки, а не ${submarineMode.kind}`);
+    expect(submarineMode.title).toBe('Глава 2. «Наутилус-8»');
+    session.leaveScene();
+
+    // Повторный вход в уже увиденный мир сцену не повторяет.
+    session.cheatTeleport('meadow');
+    expect(session.mode.kind).toBe('world');
+
+    const save = session.serialize();
+    expect([...save.seenChapters].sort()).toEqual(['meadow', 'submarine']);
+
+    // Сохранение возвращает в мир, не повторяя уже увиденные сцены.
+    const restored = GameSession.restore(gameContent, save);
+    expect(restored.mode.kind).toBe('world');
+  });
+
   describe('мини-игра: вступление, выход, перезапуск', () => {
     /** Сессия на вступлении мини-игры «Сбор урожая». */
     const atHarvestIntro = (): GameSession => {
-      const session = new GameSession(gameContent, { seed: 3 });
+      const session = createSession(gameContent, { seed: 3 });
       talk(session, { x: 5, y: 8 });
       talk(session, { x: 19, y: 14 });
       return session;
@@ -351,7 +397,7 @@ describe('GameSession', () => {
 
   describe('отладочные команды', () => {
     it('победа в мини-игре засчитывается как настоящая', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       talk(session, { x: 5, y: 8 });
       talk(session, { x: 19, y: 14 });
       session.cheatWinMinigame();
@@ -362,7 +408,7 @@ describe('GameSession', () => {
     });
 
     it('победа в бою, все карты, квесты, порталы и телепорт', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       const events = record(session);
 
       session.cheatGrantAllCards();
@@ -383,6 +429,7 @@ describe('GameSession', () => {
       place(session, { x: 29, y: 4 });
       expect(session.world.level.id).toBe('castle');
 
+      session.leaveScene();
       session.cheatTeleport('station');
       expect(session.world.level.id).toBe('station');
       expect(events).toContainEqual({ type: 'levelChanged', levelId: 'station' });
@@ -399,7 +446,7 @@ describe('GameSession', () => {
 
   describe('таблички и сундуки', () => {
     it('табличка показывает текст и не влияет на квесты', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       place(session, { x: 2, y: 8 });
       expect(session.interactionPrompt()).toMatchObject({ verb: 'прочитать', name: 'Табличка' });
       session.interact();
@@ -411,7 +458,7 @@ describe('GameSession', () => {
     });
 
     it('сундук предлагает выбор, выдаёт одну карту и больше не открывается', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       const events = record(session);
       place(session, { x: 25, y: 3 });
       expect(session.interactionPrompt()).toMatchObject({ verb: 'открыть', name: 'Сундук', at: { x: 25, y: 2 } });
@@ -435,7 +482,7 @@ describe('GameSession', () => {
     });
 
     it('от выбора можно отказаться — сундук останется закрытым', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       place(session, { x: 25, y: 3 });
       session.interact();
       session.declineReward();
@@ -445,7 +492,7 @@ describe('GameSession', () => {
     });
 
     it('открытые сундуки сохраняются, причём отдельно для каждого уровня', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       place(session, { x: 25, y: 3 });
       session.interact();
       session.chooseReward(0);
@@ -461,7 +508,7 @@ describe('GameSession', () => {
 
   describe('двери и рычаги', () => {
     it('рычаг открывает дверь, которая была непроходима', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       place(session, { x: 20, y: 4 });
       expect(session.world.findInteractable()).toBeUndefined();
       expect(session.isDoorOpen('garden_door')).toBe(false);
@@ -478,7 +525,7 @@ describe('GameSession', () => {
     });
 
     it('открытая дверь сохраняется и восстанавливается, отдельно для каждого уровня', () => {
-      const session = new GameSession(gameContent);
+      const session = createSession(gameContent);
       place(session, { x: 9, y: 7 });
       session.interact();
       skipDialog(session);
@@ -502,7 +549,7 @@ describe('GameSession', () => {
     };
 
     it('победа в мини-игре приносит монеты каждый раз, а не только за первую', () => {
-      const session = new GameSession(gameContent, { seed: 3 });
+      const session = createSession(gameContent, { seed: 3 });
       expect(session.coins).toBe(0);
       talk(session, { x: 5, y: 8 });
 
@@ -520,7 +567,7 @@ describe('GameSession', () => {
     });
 
     it('у торговца можно купить карту, пока хватает монет', () => {
-      const session = new GameSession(gameContent, { seed: 3 });
+      const session = createSession(gameContent, { seed: 3 });
       talk(session, { x: 5, y: 8 });
       winHarvest(session);
       session.interact();
@@ -544,7 +591,7 @@ describe('GameSession', () => {
     });
 
     it('монеты сохраняются и восстанавливаются', () => {
-      const session = new GameSession(gameContent, { seed: 3 });
+      const session = createSession(gameContent, { seed: 3 });
       talk(session, { x: 5, y: 8 });
       winHarvest(session);
       const save = session.serialize();

@@ -9,6 +9,7 @@ import type {
   Condition,
   Effect,
   GameContent,
+  LevelId,
   MinigameDef,
   Point,
   QuestDef,
@@ -50,7 +51,9 @@ export type Mode =
   /** Лавка торговца: можно купить любую из карт за монеты, пока не надоест. */
   | { kind: 'trade'; offers: TradeOffer[] }
   /** Финальная сцена после победы над боссом с `finale` — экран вместо обычного возврата в мир. */
-  | { kind: 'finale'; title: string; lines: string[] };
+  | { kind: 'finale'; title: string; lines: string[] }
+  /** Глава из `story.ts`, показанная заставкой при первом входе в её уровень. */
+  | { kind: 'scene'; title: string; text: string };
 
 /** Подсказка о том, с чем сейчас можно взаимодействовать. */
 export interface InteractionPrompt {
@@ -107,6 +110,8 @@ export class GameSession {
   private readonly openedChests = new Set<string>();
   /** Открытые двери в виде «уровень:объект» — как и сундуки, открываются насовсем. */
   private readonly openedDoors = new Set<string>();
+  /** Уровни, для которых уже показана вступительная сцена — чтобы не повторять её. */
+  private readonly seenChapters = new Set<LevelId>();
   /** Карты на выбор за только что выигранную мини-игру: предлагаются при выходе с экрана итога. */
   private pendingMinigameChoices: CardId[] | null = null;
   private readonly rng: Rng;
@@ -119,6 +124,16 @@ export class GameSession {
     this.quests = new QuestLog(this.content.quest);
     this.cards = new CardCollection(content.deckRules, content.player.starterDeck);
     this.syncDoors();
+    this.showLevelScene(content.player.startLevel);
+  }
+
+  /** Если для этого уровня есть глава и она ещё не показывалась — открывает её заставкой. */
+  private showLevelScene(levelId: LevelId): void {
+    if (this.seenChapters.has(levelId)) return;
+    const chapter = this.content.data.story.find((candidate) => candidate.levelId === levelId);
+    if (!chapter) return;
+    this.seenChapters.add(levelId);
+    this.setMode({ kind: 'scene', title: chapter.title, text: chapter.text });
   }
 
   /**
@@ -140,8 +155,11 @@ export class GameSession {
     for (const id of save.wonMinigames) if (has(content.minigames, id)) session.wonMinigames.add(id);
     for (const key of save.openedChests) session.openedChests.add(key);
     for (const key of save.openedDoors) session.openedDoors.add(key);
+    for (const id of save.seenChapters) session.seenChapters.add(id);
     session.syncDoors();
     session.coinCount = save.coins;
+    // Сохранение всегда возвращает в мир — вступительная сцена из конструктора тут лишняя.
+    session.setMode({ kind: 'world' });
     return session;
   }
 
@@ -165,6 +183,7 @@ export class GameSession {
       openedChests: [...this.openedChests],
       openedDoors: [...this.openedDoors],
       coins: this.coinCount,
+      seenChapters: [...this.seenChapters],
     };
   }
 
@@ -630,5 +649,11 @@ export class GameSession {
     this.syncDoors();
     this.events.emit({ type: 'levelChanged', levelId: portal.toLevel });
     this.progress({ type: 'levelEntered', levelId: portal.toLevel });
+    this.showLevelScene(portal.toLevel);
+  }
+
+  /** Закрыть вступительную сцену уровня и вернуться в мир. */
+  leaveScene(): void {
+    if (this.currentMode.kind === 'scene') this.setMode({ kind: 'world' });
   }
 }

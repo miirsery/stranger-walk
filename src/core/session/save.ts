@@ -28,6 +28,8 @@ export interface SaveData {
   openedDoors: string[];
   /** Монеты, заработанные в мини-играх — тратятся у торговца. */
   coins: number;
+  /** Уровни, для которых уже показана вступительная сцена из `story.ts`. */
+  seenChapters: string[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -81,5 +83,6 @@ export const parseSave = (raw: unknown): SaveData | null => {
     openedChests: isStringArray(raw.openedChests) ? raw.openedChests : [],
     openedDoors: isStringArray(raw.openedDoors) ? raw.openedDoors : [],
     coins: typeof raw.coins === 'number' && Number.isInteger(raw.coins) && raw.coins >= 0 ? raw.coins : 0,
+    seenChapters: isStringArray(raw.seenChapters) ? raw.seenChapters : [],
   };
 };
