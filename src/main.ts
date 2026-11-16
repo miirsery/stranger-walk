@@ -5,9 +5,16 @@ import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import { audio } from './audio/chiptune';
 import App from './ui/App.vue';
+import { reportCrash } from './ui/crash';
 import { router } from './ui/router';
 
-createApp(App).use(createPinia()).use(router).mount('#app');
+const app = createApp(App);
+app.config.errorHandler = (error) => reportCrash(error);
+app.use(createPinia()).use(router).mount('#app');
+
+// Ловит и то, что проходит мимо Vue: игровой цикл Phaser живёт вне его реактивности.
+window.addEventListener('error', (event) => reportCrash(event.error ?? event.message));
+window.addEventListener('unhandledrejection', (event) => reportCrash(event.reason));
 
 // Звук в браузере можно включить только после первого жеста пользователя.
 const unlock = (): void => audio.unlock();
