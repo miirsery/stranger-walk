@@ -251,6 +251,8 @@ export interface BossDef extends ChoiceReward {
   rewardCards: CardId[];
   winLines: string[];
   loseLines: string[];
+  /** Показывается отдельным экраном после диалога победы — финал игры, если этот босс последний. */
+  finale?: { title: string; lines: string[] };
 }
 
 // ---------- Мини-игры ----------

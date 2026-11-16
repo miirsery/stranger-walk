@@ -48,7 +48,9 @@ export type Mode =
   /** Выбор одной карты из нескольких (сундук). */
   | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; then?: () => void }
   /** Лавка торговца: можно купить любую из карт за монеты, пока не надоест. */
-  | { kind: 'trade'; offers: TradeOffer[] };
+  | { kind: 'trade'; offers: TradeOffer[] }
+  /** Финальная сцена после победы над боссом с `finale` — экран вместо обычного возврата в мир. */
+  | { kind: 'finale'; title: string; lines: string[] };
 
 /** Подсказка о том, с чем сейчас можно взаимодействовать. */
 export interface InteractionPrompt {
@@ -97,6 +99,7 @@ export class GameSession {
   private currentMode: Mode = { kind: 'world' };
   private pendingEffects: Effect[] = [];
   private pendingTalk: string | null = null;
+  private pendingFinale: { title: string; lines: string[] } | null = null;
   private readonly defeatedBosses = new Set<string>();
   private readonly wonMinigames = new Set<string>();
   private lastPortalKey: string | null = null;
@@ -407,6 +410,7 @@ export class GameSession {
     if (mode.kind !== 'battle') return;
     const { boss, battle } = mode;
     const won = battle.winner === 'player';
+    if (won && boss.finale) this.pendingFinale = boss.finale;
     if (won && !this.defeatedBosses.has(boss.id)) {
       this.defeatedBosses.add(boss.id);
       this.grantCards(boss.rewardCards);
@@ -499,11 +503,18 @@ export class GameSession {
     }
     const effects = this.pendingEffects;
     const talkedTo = this.pendingTalk;
+    const finale = this.pendingFinale;
     this.pendingEffects = [];
     this.pendingTalk = null;
-    this.setMode({ kind: 'world' });
+    this.pendingFinale = null;
+    this.setMode(finale ? { kind: 'finale', ...finale } : { kind: 'world' });
     if (talkedTo) this.progress({ type: 'npcTalked', npcId: talkedTo });
     for (const effect of effects) this.apply(effect);
+  }
+
+  /** Закрыть финальную сцену и вернуться в мир — игру можно продолжать и после титров. */
+  leaveFinale(): void {
+    if (this.currentMode.kind === 'finale') this.setMode({ kind: 'world' });
   }
 
   private apply(effect: Effect): void {

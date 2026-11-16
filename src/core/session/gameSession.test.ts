@@ -240,6 +240,49 @@ describe('GameSession', () => {
     expect(session.world.map.setting.id).toBe('space');
   });
 
+  it('победа над последним боссом показывает финальную сцену, а не возврат в мир', () => {
+    const captain = new ContentRegistry(gameContent).boss('void_captain');
+    const session = new GameSession(
+      { ...gameContent, bosses: { ...gameContent.bosses, void_captain: { ...captain, health: 1 } } },
+      { seed: 7 },
+    );
+    session.world.loadLevel('station');
+    session.quests.start('beyond');
+    session.quests.handle({ type: 'levelEntered', levelId: 'station' });
+    place(session, { x: 18, y: 5 });
+    session.interact();
+    skipDialog(session);
+
+    session.battleMulligan([]);
+    for (let turn = 0; turn < 50; turn++) {
+      const mode = session.mode;
+      if (mode.kind !== 'battle' || mode.battle.winner) break;
+      const state = mode.battle.snapshot();
+      state.sides.player.hand.forEach((_, index) => session.battlePlayCard(state.sides.player.hand.length - 1 - index));
+      for (const unit of mode.battle.snapshot().sides.player.board) {
+        const target = mode.battle.validTargets('player')[0];
+        if (target) session.battleAttack(unit.uid, target);
+      }
+      session.battleEndTurn();
+      finishEnemyTurn(session);
+    }
+    expect(session.mode.kind === 'battle' && session.mode.battle.winner).toBe('player');
+
+    session.leaveBattle();
+    takeChoice(session);
+    skipDialog(session);
+    expect(session.quests.status('beyond')).toBe('completed');
+
+    const mode = session.mode;
+    if (mode.kind !== 'finale') throw new Error(`ожидалась финальная сцена, а не ${mode.kind}`);
+    expect(mode.title).toBe('Эпилог. Возвращённая колода');
+    expect(mode.lines.length).toBeGreaterThan(0);
+
+    // Финал можно закрыть и продолжить игру — мир не блокируется.
+    session.leaveFinale();
+    expect(session.mode.kind).toBe('world');
+  });
+
   describe('мини-игра: вступление, выход, перезапуск', () => {
     /** Сессия на вступлении мини-игры «Сбор урожая». */
     const atHarvestIntro = (): GameSession => {

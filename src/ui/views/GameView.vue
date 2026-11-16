@@ -7,6 +7,7 @@ import BattleOverlay from '../components/BattleOverlay.vue';
 import DebugPanel from '../components/DebugPanel.vue';
 import DeckOverlay from '../components/DeckOverlay.vue';
 import DialogBox from '../components/DialogBox.vue';
+import FinaleOverlay from '../components/FinaleOverlay.vue';
 import GameHud from '../components/GameHud.vue';
 import GameLoader from '../components/GameLoader.vue';
 import JournalOverlay from '../components/JournalOverlay.vue';
@@ -44,6 +45,7 @@ const {
   interactTarget,
   rewardOptions,
   tradeOffers,
+  finale,
 } = game;
 const settings = useSettingsStore();
 
@@ -104,6 +106,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
       <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
       <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" :can-decline="rewardOptions.canDecline" />
       <TradeOverlay v-if="tradeOffers" :session="session" :offers="tradeOffers" :coins="coins" />
+      <FinaleOverlay v-if="finale" :title="finale.title" :lines="finale.lines" @close="session.leaveFinale()" />
 
       <ul class="game__toasts" aria-live="polite">
         <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>
