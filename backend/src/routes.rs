@@ -1,11 +1,16 @@
-use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::{get, post}};
 use serde::Serialize;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
-use crate::state::AppState;
+use crate::{auth, state::AppState};
 
 pub fn router(state: AppState) -> Router {
-    let api = Router::new().route("/health", get(health));
+    let api = Router::new()
+        .route("/health", get(health))
+        .route("/auth/register", post(auth::register))
+        .route("/auth/login", post(auth::login))
+        .route("/auth/logout", post(auth::logout))
+        .route("/auth/me", get(auth::me));
 
     Router::new()
         .nest("/api/v1", api)

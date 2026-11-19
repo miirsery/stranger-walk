@@ -4,7 +4,9 @@
 //! health-запросы. Сохранение прогресса появится на следующих шагах — новые
 //! маршруты добавляются в `routes`, новые таблицы — файлами в `migrations/`.
 
+mod auth;
 mod config;
+mod error;
 mod routes;
 mod state;
 
@@ -34,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("не удалось применить миграции")?;
 
-    let app = routes::router(AppState { pool });
+    let app = routes::router(AppState { pool, cookie_secure: config.cookie_secure });
     let listener = TcpListener::bind(config.listen_addr)
         .await
         .with_context(|| format!("не удалось занять адрес {}", config.listen_addr))?;
