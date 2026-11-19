@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { CardDef, CardKeyword } from '@core/content/types';
+import type { CardDef } from '@core/content/types';
 import { computed } from 'vue';
+import { KEYWORD_LABELS } from './cardKeywords';
 
 const props = defineProps<{
   card: CardDef;
@@ -10,14 +11,11 @@ const props = defineProps<{
   /** Цвет сеттинга карты, 0xRRGGBB. */
   tint: number;
   compact?: boolean;
+  /** Значок «?» с полным текстом карты — только там, где его слушают (сейчас бой). */
+  inspectable?: boolean;
 }>();
 
-const KEYWORD_LABELS: Record<CardKeyword, string> = {
-  guard: 'Защитник',
-  charge: 'Рывок',
-  poison: 'Яд',
-  shield: 'Щит',
-};
+const emit = defineEmits<{ inspectHover: []; inspectToggle: [] }>();
 
 const tintCss = computed(() => `#${props.tint.toString(16).padStart(6, '0')}`);
 const unit = computed(() => (props.card.type === 'unit' ? props.card : null));
@@ -29,6 +27,18 @@ const buffed = computed(() => unit.value !== null && (health.value > unit.value.
 
 <template>
   <span class="card" :class="[`card--${card.rarity}`, { 'card--compact': compact, 'card--spell': !unit }]">
+    <span
+      v-if="inspectable"
+      class="card__info"
+      role="button"
+      tabindex="0"
+      aria-label="Что делает карта"
+      @mouseenter="emit('inspectHover')"
+      @click.stop="emit('inspectToggle')"
+      @keydown.enter.space.stop.prevent="emit('inspectToggle')"
+    >
+      ?
+    </span>
     <span class="card__cost" aria-label="Стоимость">{{ card.cost }}</span>
     <span class="card__art" :style="{ background: tintCss }" aria-hidden="true">{{ card.name.charAt(0) }}</span>
     <span class="card__name">{{ card.name }}</span>
@@ -82,6 +92,25 @@ const buffed = computed(() => unit.value !== null && (health.value > unit.value.
 .card--compact {
   width: 76px;
   height: 104px;
+}
+
+.card__info {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--ink);
+  cursor: help;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
 }
 
 .card__cost {

@@ -5,6 +5,7 @@ import type { GameSession } from '@core/session/gameSession';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useSettingsStore } from '../stores/settings';
 import CardFace from './CardFace.vue';
+import { KEYWORD_DESCRIPTIONS, KEYWORD_LABELS } from './cardKeywords';
 
 const props = defineProps<{ session: GameSession; state: BattleState }>();
 
@@ -75,6 +76,20 @@ watch(
 
 const card = (cardId: string): CardDef => props.session.content.card(cardId);
 const tint = (cardId: string): number => props.session.content.setting(card(cardId).setting).backgroundColor;
+
+// ---------- Подсказка «что делает карта» ----------
+const inspect = ref<CardDef | null>(null);
+/** Наведение всегда показывает карту; повторное нажатие на уже открытую — закрывает. */
+const showInspect = (cardId: string): void => {
+  inspect.value = card(cardId);
+};
+const toggleInspect = (cardId: string): void => {
+  const target = card(cardId);
+  inspect.value = inspect.value?.id === target.id ? null : target;
+};
+const closeInspect = (): void => {
+  inspect.value = null;
+};
 
 /** Цели выбранного существа (по правилу защитников) или заклинания, для которого выбирается цель. */
 const targets = computed<AttackTarget[]>(() => {
@@ -407,7 +422,16 @@ watch(
             :disabled="!canTargetUnit(unit.uid)"
             @click="attack({ type: 'unit', uid: unit.uid })"
           >
-            <CardFace :card="card(unit.cardId)" :attack="unit.attack" :health="unit.health" :tint="tint(unit.cardId)" compact />
+            <CardFace
+              :card="card(unit.cardId)"
+              :attack="unit.attack"
+              :health="unit.health"
+              :tint="tint(unit.cardId)"
+              compact
+              inspectable
+              @inspect-hover="showInspect(unit.cardId)"
+              @inspect-toggle="toggleInspect(unit.cardId)"
+            />
             <span v-for="item in floatsFor(`unit:${unit.uid}`)" :key="item.id" class="battle__float" :class="item.delta < 0 ? 'battle__float--damage' : 'battle__float--heal'" aria-hidden="true">{{ item.delta > 0 ? '+' : '' }}{{ item.delta }}</span>
           </button>
         </li>
@@ -430,7 +454,16 @@ watch(
             :aria-pressed="selectedUid === unit.uid"
             @click="selectUnit(unit)"
           >
-            <CardFace :card="card(unit.cardId)" :attack="unit.attack" :health="unit.health" :tint="tint(unit.cardId)" compact />
+            <CardFace
+              :card="card(unit.cardId)"
+              :attack="unit.attack"
+              :health="unit.health"
+              :tint="tint(unit.cardId)"
+              compact
+              inspectable
+              @inspect-hover="showInspect(unit.cardId)"
+              @inspect-toggle="toggleInspect(unit.cardId)"
+            />
             <span v-for="item in floatsFor(`unit:${unit.uid}`)" :key="item.id" class="battle__float" :class="item.delta < 0 ? 'battle__float--damage' : 'battle__float--heal'" aria-hidden="true">{{ item.delta > 0 ? '+' : '' }}{{ item.delta }}</span>
           </button>
         </li>
@@ -493,7 +526,7 @@ watch(
             :title="card(cardId).text"
             @click="playCard(index)"
           >
-            <CardFace :card="card(cardId)" :tint="tint(cardId)" />
+            <CardFace :card="card(cardId)" :tint="tint(cardId)" inspectable @inspect-hover="showInspect(cardId)" @inspect-toggle="toggleInspect(cardId)" />
           </button>
         </li>
       </ul>
@@ -513,6 +546,17 @@ watch(
       aria-hidden="true"
     />
 
+    <div v-if="inspect" class="battle__inspect pixel-panel" role="status" aria-live="polite">
+      <button type="button" class="battle__inspect-close" aria-label="Закрыть подсказку" @click="closeInspect">×</button>
+      <p class="battle__inspect-name">{{ inspect.name }}</p>
+      <p class="battle__inspect-text">{{ inspect.text }}</p>
+      <ul v-if="inspect.type === 'unit' && inspect.keywords.length" class="battle__inspect-keywords">
+        <li v-for="keyword in inspect.keywords" :key="keyword">
+          <strong>{{ KEYWORD_LABELS[keyword] }}</strong> — {{ KEYWORD_DESCRIPTIONS[keyword] }}
+        </li>
+      </ul>
+    </div>
+
     <div v-if="mulliganPhase" class="battle__result" role="dialog" aria-modal="true" aria-label="Стартовая рука">
       <div class="pixel-panel battle__mulligan">
         <h2 class="battle__mulligan-title">Стартовая рука</h2>
@@ -527,7 +571,7 @@ watch(
               :title="card(cardId).text"
               @click="toggleMulligan(index)"
             >
-              <CardFace :card="card(cardId)" :tint="tint(cardId)" />
+              <CardFace :card="card(cardId)" :tint="tint(cardId)" inspectable @inspect-hover="showInspect(cardId)" @inspect-toggle="toggleInspect(cardId)" />
             </button>
           </li>
         </ul>
@@ -688,6 +732,58 @@ watch(
 
 .battle__meta {
   color: var(--muted);
+}
+
+.battle__inspect {
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  z-index: 20;
+  width: min(260px, calc(100vw - 24px));
+  text-align: left;
+  transform: translateX(-50%);
+}
+
+.battle__inspect-close {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  background: var(--red);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.battle__inspect-name {
+  margin-bottom: 4px;
+  color: var(--gold);
+}
+
+.battle__inspect-text {
+  line-height: 1.5;
+}
+
+.battle__inspect-keywords {
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+}
+
+.battle__inspect-keywords li {
+  margin-top: 4px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.battle__inspect-keywords strong {
+  color: var(--text);
 }
 
 .battle__board {
