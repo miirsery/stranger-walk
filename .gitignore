@@ -7,3 +7,7 @@ coverage/
 *.local
 backend/target/
 .vite/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
