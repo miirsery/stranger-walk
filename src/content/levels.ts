@@ -183,6 +183,17 @@ export const levels: Record<string, LevelDef> = {
     spawn: { x: 2, y: 4 },
     npcs: [{ npcId: 'void_captain', at: { x: 18, y: 5 } }],
     portals: [{ at: { x: 0, y: 4 }, toLevel: 'castle', toSpawn: { x: 18, y: 2 } }],
-    objects: [{ id: 'orbit_chest', type: 'chest', at: { x: 10, y: 8 }, choices: ['laser', 'barrier', 'star_map'] }],
+    objects: [
+      { id: 'orbit_chest', type: 'chest', at: { x: 10, y: 8 }, choices: ['laser', 'barrier', 'star_map'] },
+      {
+        id: 'vault_sign',
+        type: 'sign',
+        at: { x: 5, y: 2 },
+        lines: ['Заклеенная панель.', 'Старый аварийный отсек — говорят, прежний экипаж что-то здесь оставил.'],
+      },
+      { id: 'vault_lever', type: 'lever', at: { x: 7, y: 3 }, opens: ['vault_door'] },
+      { id: 'vault_door', type: 'door', at: { x: 10, y: 2 } },
+      { id: 'vault_chest', type: 'chest', at: { x: 10, y: 3 }, choices: ['titan', 'barrier', 'turret'] },
+    ],
   },
 };
