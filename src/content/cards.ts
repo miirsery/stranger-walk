@@ -39,6 +39,7 @@ const list: CardDef[] = [
   unit('bull', 'Бык', 'fields', 4, 4, 5, 'rare', 'Лучше не стоять у него на пути.'),
   spell('feast', 'Пир урожая', 'fields', 2, 'common', 'Лечит героя на 4.', { type: 'healHero', amount: 4 }),
   unit('viper', 'Гадюка', 'fields', 2, 1, 2, 'rare', 'Яд: убивает любое существо, которое ранит.', ['poison']),
+  unit('hive', 'Дикий рой', 'fields', 1, 2, 1, 'common', 'Рывок: жалит сразу, но долго не живёт.', ['charge']),
   // Подводная лодка
   unit('crab', 'Краб-механик', 'submarine', 2, 2, 3, 'common', 'При выходе: лечит героя на 2.', [], { type: 'healHero', amount: 2 }),
   unit('torpedo', 'Торпеда', 'submarine', 3, 4, 1, 'rare', 'Рывок: атакует сразу.', ['charge']),

@@ -11,6 +11,15 @@ export const quests: Record<string, QuestDef> = {
     ],
     rewardCards: ['bull', 'crab'],
   },
+  wild_swarm: {
+    id: 'wild_swarm',
+    title: 'Дикий рой',
+    description: 'Помоги пасечнику Тихону прогнать одичавший рой у пруда.',
+    objectives: [
+      { id: 'win_harvest_for_bees', text: 'Собери урожай ещё раз, пока рой не вернулся', type: 'winMinigame', minigameId: 'harvest' },
+    ],
+    rewardCards: ['hive'],
+  },
   deep_cargo: {
     id: 'deep_cargo',
     title: 'Глубинный груз',

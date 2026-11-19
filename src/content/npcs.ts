@@ -51,6 +51,37 @@ export const npcs: Record<string, NpcDef> = {
       },
     ],
   },
+  beekeeper: {
+    id: 'beekeeper',
+    name: 'Пасечник Тихон',
+    look: { body: 0xd9b34a, skin: 0xe0ac7e, hat: 0xf2f2f2 },
+    scripts: [
+      {
+        when: [{ type: 'questStatus', questId: 'first_steps', status: 'inactive' }],
+        lines: ['Рой совсем одичал у пруда — но сперва помоги старейшине, потом поговорим.'],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'first_steps', status: 'active' }],
+        lines: ['Мирон всё ещё ждёт помощи с урожаем? Рой подождёт, старейшина — нет.'],
+      },
+      {
+        when: [
+          { type: 'questStatus', questId: 'first_steps', status: 'completed' },
+          { type: 'questStatus', questId: 'wild_swarm', status: 'inactive' },
+        ],
+        lines: [
+          'Странник! Рой у пруда взбесился — того гляди, разнесёт ульи.',
+          'Пчёлы боятся шума сбора урожая. Собери его ещё раз у Мирона — прогонишь рой заодно.',
+        ],
+        effects: [{ type: 'startQuest', questId: 'wild_swarm' }],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'wild_swarm', status: 'active' }],
+        lines: ['Корзина у Мирона. Собери урожай ещё раз — рой угомонится.'],
+      },
+      { lines: ['Рой угомонился. Заходи — мёд для тебя всегда найдётся.'] },
+    ],
+  },
   captain: {
     id: 'captain',
     name: 'Капитан Ния',

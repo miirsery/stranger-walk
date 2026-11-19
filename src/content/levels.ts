@@ -34,6 +34,7 @@ export const levels: Record<string, LevelDef> = {
       { npcId: 'elder', at: { x: 5, y: 7 } },
       { npcId: 'farmer', at: { x: 19, y: 13 } },
       { npcId: 'trader', at: { x: 23, y: 11 } },
+      { npcId: 'beekeeper', at: { x: 24, y: 4 } },
     ],
     portals: [
       {
@@ -100,6 +101,15 @@ export const levels: Record<string, LevelDef> = {
         lines: ['«Наутилус-8», центральный отсек.', 'Механик — в кормовом отсеке на востоке. Шлюз к замку — там же.'],
       },
       { id: 'stern_chest', type: 'chest', at: { x: 26, y: 6 }, choices: ['harpoon', 'jellyfish', 'crab'] },
+      {
+        id: 'hull_sign',
+        type: 'sign',
+        at: { x: 7, y: 6 },
+        lines: ['Царапины на обшивке.', 'Кто-то из старой команды прятал здесь личные вещи.'],
+      },
+      { id: 'hull_lever', type: 'lever', at: { x: 9, y: 7 }, opens: ['hull_door'] },
+      { id: 'hull_door', type: 'door', at: { x: 13, y: 6 } },
+      { id: 'hull_chest', type: 'chest', at: { x: 14, y: 6 }, choices: ['kraken', 'depth_charge', 'mine'] },
     ],
   },
   castle: {
@@ -142,6 +152,15 @@ export const levels: Record<string, LevelDef> = {
         lines: ['Тронный зал.', 'Вошедший садится за стол. Проигравший оставляет карты.'],
       },
       { id: 'hall_chest', type: 'chest', at: { x: 2, y: 11 }, choices: ['paladin', 'standard_bearer', 'knight'] },
+      {
+        id: 'crypt_sign',
+        type: 'sign',
+        at: { x: 18, y: 9 },
+        lines: ['Щель за факелом.', 'Оруженосец Хранителя прятал здесь своё первое оружие.'],
+      },
+      { id: 'crypt_lever', type: 'lever', at: { x: 18, y: 11 }, opens: ['crypt_door'] },
+      { id: 'crypt_door', type: 'door', at: { x: 19, y: 8 } },
+      { id: 'crypt_chest', type: 'chest', at: { x: 19, y: 9 }, choices: ['squire', 'blessing', 'knight'] },
     ],
   },
   station: {
