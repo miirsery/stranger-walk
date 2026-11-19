@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "vue"],
+  "categories": { "correctness": "error" },
+  "ignorePatterns": ["dist", "coverage", "node_modules", "backend"],
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-non-null-assertion": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/core/**/*.ts", "src/content/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["vue", "vue-router", "pinia", "phaser", "@/*", "**/render/**", "**/ui/**", "**/audio/**"],
+                "message": "src/core и src/content не должны зависеть от Vue, Phaser, DOM и слоёв представления."
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": ["error", "window", "document", "navigator", "localStorage"]
+      }
+    }
+  ]
+}

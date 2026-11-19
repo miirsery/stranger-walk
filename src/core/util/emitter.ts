@@ -13,7 +13,7 @@ export class Emitter<T> {
   }
 
   emit(event: T): void {
-    for (const listener of [...this.listeners]) listener(event);
+    for (const listener of Array.from(this.listeners)) listener(event);
   }
 
   clear(): void {

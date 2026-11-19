@@ -89,7 +89,7 @@ export class InputHub {
   }
 
   triggerAction(): void {
-    for (const listener of [...this.actionListeners]) listener();
+    for (const listener of Array.from(this.actionListeners)) listener();
   }
 
   onAction(listener: ActionListener): () => void {

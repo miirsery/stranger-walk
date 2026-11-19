@@ -47,7 +47,7 @@ export type Mode =
   | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame; phase: MinigamePhase; wonBefore: boolean }
   | { kind: 'battle'; boss: BossDef; battle: CardBattle }
   /** Выбор одной карты из нескольких (сундук). */
-  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; then?: () => void }
+  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; after?: () => void }
   /** Лавка торговца: можно купить любую из карт за монеты, пока не надоест. */
   | { kind: 'trade'; offers: TradeOffer[] }
   /** Финальная сцена после победы над боссом с `finale` — экран вместо обычного возврата в мир. */
@@ -291,7 +291,7 @@ export class GameSession {
     if (mode.chestKey) this.openedChests.add(mode.chestKey);
     this.setMode({ kind: 'world' });
     this.grantCards([cardId]);
-    mode.then?.();
+    mode.after?.();
   }
 
   /** Закрыть выбор, ничего не взяв: сундук останется закрытым. Награду за победу отклонить нельзя. */
@@ -441,7 +441,7 @@ export class GameSession {
           title: 'Награда за победу',
           options: choices,
           chestKey: null,
-          then: () => this.openDialog(boss.name, boss.winLines, []),
+          after: () => this.openDialog(boss.name, boss.winLines, []),
         });
         return;
       }
