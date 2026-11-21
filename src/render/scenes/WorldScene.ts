@@ -22,6 +22,8 @@ const STEP_FRAME_MS = 160;
 const TILE_FRAME_MS = 500;
 /** На таком расстоянии (в пикселях) NPC поворачивается к игроку. */
 const NPC_NOTICE_RANGE = TILE_SIZE * 3;
+/** Кадр персонажа — 2 тайла высотой (см. `textures.ts`); сдвиг вверх держит ноги на прежнем месте. */
+const CHAR_Y_OFFSET = -10;
 
 const INK = 0x14121f;
 
@@ -158,7 +160,7 @@ export class WorldScene extends Phaser.Scene {
     if (!paused) session.update(delta, input.getMove());
 
     const state = session.world.player;
-    this.player.setPosition(Math.round(state.x), Math.round(state.y) - 2);
+    this.player.setPosition(state.x, state.y + CHAR_Y_OFFSET);
     const stepPhase = Math.floor(this.time.now / STEP_FRAME_MS) % 2;
     const step = state.moving && stepPhase === 1 ? 1 : 0;
     this.player.setFrame(characterFrame(state.facing, step));
@@ -181,7 +183,7 @@ export class WorldScene extends Phaser.Scene {
     // Патрулирующие NPC идут по маршруту; у игрока рядом — поворачиваются к нему, а не идут дальше по курсу.
     for (const { sprite, index } of this.npcSprites) {
       const view = session.world.npcView(index);
-      sprite.setPosition(Math.round(view.x), Math.round(view.y) - 2);
+      sprite.setPosition(view.x, view.y + CHAR_Y_OFFSET);
       const dx = state.x - view.x;
       const dy = state.y - view.y;
       let facing: Facing = view.facing;
@@ -371,7 +373,7 @@ export class WorldScene extends Phaser.Scene {
       const npc = content.npc(placement.npcId);
       const key = ensureCharacterTexture(this, `char-${npc.id}`, npc.id, npc.look);
       const view = world.npcView(index);
-      const sprite = this.add.sprite(view.x, view.y - 2, key, characterFrame(view.facing, 0)).setDepth(5);
+      const sprite = this.add.sprite(view.x, view.y + CHAR_Y_OFFSET, key, characterFrame(view.facing, 0)).setDepth(5);
       this.npcSprites.push({ sprite, index });
     });
 

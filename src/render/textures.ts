@@ -126,12 +126,18 @@ const FACINGS: readonly Facing[] = ['down', 'up', 'left', 'right'];
 export const characterFrame = (facing: Facing, step: 0 | 1): number => FACINGS.indexOf(facing) * 2 + step;
 
 /**
+ * Персонажи рисуются крупнее тайла (128→16px «кашу» из AI-арта исправили, подняв итоговый
+ * размер кадра до 2 тайлов — см. `WorldScene` про компенсирующий сдвиг по Y).
+ */
+const CHAR_SIZE = TILE_SIZE * 2;
+
+/**
  * `id` — идентификатор персонажа в контенте (`player`, `npc.id`): по нему ищется готовый арт.
  * Нарисованного кадра ходьбы нет — при наличии арта все 8 кадров показывают один и тот же рисунок.
  */
 export const ensureCharacterTexture = (scene: Phaser.Scene, key: string, id: string, look: SpriteLook): string => {
   if (scene.textures.exists(key)) return key;
-  const texture = scene.textures.createCanvas(key, TILE_SIZE * FACINGS.length * 2, TILE_SIZE);
+  const texture = scene.textures.createCanvas(key, CHAR_SIZE * FACINGS.length * 2, CHAR_SIZE);
   if (!texture) throw new Error(`Не удалось создать текстуру ${key}`);
   const ctx = texture.getContext();
   const art = hasCharacterArt(id) ? getArtSource(scene, characterArtKey(id)) : null;
@@ -142,20 +148,25 @@ export const ensureCharacterTexture = (scene: Phaser.Scene, key: string, id: str
   FACINGS.forEach((facing, facingIndex) => {
     for (const step of [0, 1] as const) {
       const frame = facingIndex * 2 + step;
-      const ox = frame * TILE_SIZE;
+      const ox = frame * CHAR_SIZE;
       if (art) {
-        drawArt(ctx, art, ox, TILE_SIZE);
+        drawArt(ctx, art, ox, CHAR_SIZE);
       } else {
-        fill(ctx, ox, INK, [[3, 0, 10, 9], [2, 7, 12, 7]]);
-        fill(ctx, ox, skin, [[4, 3, 8, 5], [2, 9, 1, 3], [13, 9, 1, 3]]);
-        fill(ctx, ox, hat, facing === 'up' ? [[4, 1, 8, 6]] : [[4, 1, 8, 3]]);
-        fill(ctx, ox, body, [[3, 8, 10, 5]]);
-        if (facing === 'down') fill(ctx, ox, INK, [[6, 5, 1, 2], [9, 5, 1, 2]]);
-        if (facing === 'left') fill(ctx, ox, INK, [[5, 5, 1, 2]]);
-        if (facing === 'right') fill(ctx, ox, INK, [[10, 5, 1, 2]]);
-        fill(ctx, ox, INK, step === 0 ? [[5, 13, 2, 3], [9, 13, 2, 3]] : [[5, 13, 2, 3], [9, 13, 2, 1]]);
+        // Процедурная заглушка рисуется в прежней 16-пиксельной сетке, затем масштабируется ×2.
+        ctx.save();
+        ctx.translate(ox, 0);
+        ctx.scale(2, 2);
+        fill(ctx, 0, INK, [[3, 0, 10, 9], [2, 7, 12, 7]]);
+        fill(ctx, 0, skin, [[4, 3, 8, 5], [2, 9, 1, 3], [13, 9, 1, 3]]);
+        fill(ctx, 0, hat, facing === 'up' ? [[4, 1, 8, 6]] : [[4, 1, 8, 3]]);
+        fill(ctx, 0, body, [[3, 8, 10, 5]]);
+        if (facing === 'down') fill(ctx, 0, INK, [[6, 5, 1, 2], [9, 5, 1, 2]]);
+        if (facing === 'left') fill(ctx, 0, INK, [[5, 5, 1, 2]]);
+        if (facing === 'right') fill(ctx, 0, INK, [[10, 5, 1, 2]]);
+        fill(ctx, 0, INK, step === 0 ? [[5, 13, 2, 3], [9, 13, 2, 3]] : [[5, 13, 2, 3], [9, 13, 2, 1]]);
+        ctx.restore();
       }
-      texture.add(frame, 0, ox, 0, TILE_SIZE, TILE_SIZE);
+      texture.add(frame, 0, ox, 0, CHAR_SIZE, CHAR_SIZE);
     }
   });
   texture.refresh();
