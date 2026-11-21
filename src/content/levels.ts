@@ -77,7 +77,7 @@ export const levels: Record<string, LevelDef> = {
       '#....=..............=........#',
       '#....#..............#........#',
       '#....#..............#........#',
-      '##############################',
+      '################D#############',
     ],
     spawn: { x: 1, y: 2 },
     npcs: [
@@ -93,6 +93,7 @@ export const levels: Record<string, LevelDef> = {
         requires: [{ type: 'questStatus', questId: 'deep_cargo', status: 'completed' }],
         lockedText: 'Шлюз задраен. Капитан откроет его, когда груз будет найден.',
       },
+      { at: { x: 16, y: 8 }, toLevel: 'ballast', toSpawn: { x: 7, y: 1 } },
     ],
     objects: [
       {
@@ -195,6 +196,32 @@ export const levels: Record<string, LevelDef> = {
       { id: 'vault_lever', type: 'lever', at: { x: 7, y: 3 }, opens: ['vault_door'] },
       { id: 'vault_door', type: 'door', at: { x: 10, y: 2 } },
       { id: 'vault_chest', type: 'chest', at: { x: 10, y: 3 }, choices: ['titan', 'barrier', 'turret'] },
+    ],
+  },
+  ballast: {
+    id: 'ballast',
+    name: 'Балластный отсек',
+    setting: 'submarine',
+    rows: [
+      '#######D######',
+      '#............#',
+      '#....=...o...#',
+      '#....=.......#',
+      '#....=.......#',
+      '#....=.......#',
+      '#............#',
+      '##############',
+    ],
+    spawn: { x: 7, y: 1 },
+    npcs: [{ npcId: 'old_diver', at: { x: 10, y: 2 } }],
+    portals: [{ at: { x: 7, y: 0 }, toLevel: 'submarine', toSpawn: { x: 16, y: 7 } }],
+    objects: [
+      {
+        id: 'ballast_sign',
+        type: 'sign',
+        at: { x: 3, y: 1 },
+        lines: ['Балластный отсек.', 'Сюда давно никто не спускался — трубы ржавые, но кто-то здесь всё же живёт.'],
+      },
     ],
   },
   forest: {

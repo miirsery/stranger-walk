@@ -39,6 +39,15 @@ export const quests: Record<string, QuestDef> = {
     ],
     rewardCards: ['torpedo', 'diver', 'kraken', 'mine'],
   },
+  ballast_echo: {
+    id: 'ballast_echo',
+    title: 'Эхо из отсека',
+    description: 'Капитан слышала стук из балластного отсека — узнай, в чём дело.',
+    objectives: [
+      { id: 'talk_diver', text: 'Спустись в балластный отсек и найди источник стука', type: 'talkTo', npcId: 'old_diver' },
+    ],
+    rewardCards: ['jellyfish'],
+  },
   final_game: {
     id: 'final_game',
     title: 'Последняя партия',

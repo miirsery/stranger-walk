@@ -120,6 +120,14 @@ export const npcs: Record<string, NpcDef> = {
         ],
         effects: [{ type: 'startQuest', questId: 'final_game' }],
       },
+      {
+        when: [{ type: 'questStatus', questId: 'ballast_echo', status: 'inactive' }],
+        lines: [
+          'Постой. Пока ты был у механика, я слышала стук из балластного отсека внизу.',
+          'Мы туда давно не заглядывали — если не страшно, глянь, что там.',
+        ],
+        effects: [{ type: 'startQuest', questId: 'ballast_echo' }],
+      },
       { lines: ['Семь футов под килем, Странник.'] },
     ],
   },
@@ -180,6 +188,26 @@ export const npcs: Record<string, NpcDef> = {
           },
         ],
       },
+    ],
+  },
+  old_diver: {
+    id: 'old_diver',
+    name: 'Старый водолаз Феликс',
+    look: { body: 0x4a3f2b, skin: 0xc98f6b, hat: 0x2c3a47 },
+    scripts: [
+      {
+        when: [{ type: 'questStatus', questId: 'ballast_echo', status: 'inactive' }],
+        lines: ['Стук? А, это трубы — старые, вот и бьются о переборку. Не беспокойся.'],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'ballast_echo', status: 'active' }],
+        lines: [
+          'Капитан прислала? Значит, не одному мне было интересно.',
+          'Я тут живу с тех пор, как списался на берег — отсек тихий, медузы в балласте светятся по ночам.',
+          'Возьми одну — в бою жалит похлеще настоящей.',
+        ],
+      },
+      { lines: ['Трубы стучат, медузы светятся — всё как обычно.'] },
     ],
   },
   hermit: {
