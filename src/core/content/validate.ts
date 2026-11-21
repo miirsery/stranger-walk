@@ -84,6 +84,7 @@ export const validateContent = (content: GameContent): string[] => {
 
   for (const setting of Object.values(content.settings)) {
     need(content.music, 'трек', setting.music, `Сеттинг ${setting.id}`);
+    if (setting.musicAlt !== undefined) need(content.music, 'трек', setting.musicAlt, `Сеттинг ${setting.id}`);
     for (const char of Object.keys(setting.tiles)) {
       if (char.length !== 1) errors.push(`Сеттинг ${setting.id}: ключ тайла «${char}» должен быть одним символом`);
     }

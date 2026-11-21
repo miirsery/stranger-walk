@@ -39,6 +39,8 @@ export interface SettingDef {
   description: string;
   backgroundColor: number;
   music: TrackId;
+  /** Второй трек того же сеттинга — при входе в его мир выбирается один из двух наугад. */
+  musicAlt?: TrackId;
   /** Ключ — один символ, которым тайл обозначается в `LevelDef.rows`. */
   tiles: Record<string, TileDef>;
 }
@@ -302,6 +304,8 @@ export interface MusicTrackDef {
   bpm: number;
   lead: string;
   bass: string;
+  /** Ударные: «K» — бас-бочка, «S» — малый, «H» — хай-хэт, «-» — пауза. Синтезируются из шума. */
+  drums: string;
 }
 
 // ---------- Игрок, сюжет, корень ----------

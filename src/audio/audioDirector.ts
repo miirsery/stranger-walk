@@ -3,9 +3,22 @@ import type { ChiptuneAudio } from './chiptune';
 
 /** Связывает события игры со звуком: выбирает трек под сцену и играет эффекты. */
 export const attachAudio = (session: GameSession, audio: ChiptuneAudio): (() => void) => {
+  // Один из двух треков сеттинга выбирается наугад при входе в его мир и держится, пока мир не сменится, —
+  // иначе пауза/диалог/бой пересчитывали бы выбор на каждую смену режима.
+  let worldSettingId: string | null = null;
+  let worldTrackId = '';
+  const worldMusicTrack = (): string => {
+    const setting = session.world.map.setting;
+    if (setting.id !== worldSettingId) {
+      worldSettingId = setting.id;
+      worldTrackId = setting.musicAlt && Math.random() < 0.5 ? setting.musicAlt : setting.music;
+    }
+    return worldTrackId;
+  };
+
   const syncMusic = (): void => {
     const mode = session.mode;
-    let trackId = session.world.map.setting.music;
+    let trackId = worldMusicTrack();
     if (mode.kind === 'minigame') trackId = mode.def.music;
     if (mode.kind === 'battle') trackId = mode.boss.music;
     audio.playTrack(session.content.track(trackId));

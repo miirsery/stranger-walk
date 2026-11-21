@@ -12,11 +12,14 @@ export const noteToFrequency = (note: string): number | null => {
   return 440 * 2 ** ((midi - 69) / 12);
 };
 
-export type SfxName = 'blip' | 'confirm' | 'reward' | 'hit' | 'win' | 'lose' | 'portal';
+export type SfxName = 'blip' | 'confirm' | 'reward' | 'hit' | 'win' | 'lose' | 'portal' | 'step';
 
 type Tone = readonly [frequency: number, durationSec: number];
 
-const SFX: Record<SfxName, { wave: OscillatorType; tones: readonly Tone[] }> = {
+/** Эффекты на основе осциллятора — у «step» своя, шумовая синтез-схема (см. `noise`). */
+type ToneSfxName = Exclude<SfxName, 'step'>;
+
+const SFX: Record<ToneSfxName, { wave: OscillatorType; tones: readonly Tone[] }> = {
   blip: { wave: 'square', tones: [[660, 0.05]] },
   confirm: { wave: 'square', tones: [[523, 0.07], [784, 0.1]] },
   reward: { wave: 'square', tones: [[523, 0.07], [659, 0.07], [784, 0.07], [1047, 0.16]] },
@@ -24,6 +27,15 @@ const SFX: Record<SfxName, { wave: OscillatorType; tones: readonly Tone[] }> = {
   win: { wave: 'square', tones: [[523, 0.1], [659, 0.1], [784, 0.1], [1047, 0.1], [1319, 0.3]] },
   lose: { wave: 'triangle', tones: [[392, 0.15], [330, 0.15], [262, 0.15], [196, 0.35]] },
   portal: { wave: 'triangle', tones: [[330, 0.06], [440, 0.06], [587, 0.06], [880, 0.12]] },
+};
+
+/** Ударные — один и тот же шумовой буфер, форма звука меняется фильтром. */
+type DrumHit = 'K' | 'S' | 'H';
+
+const DRUMS: Record<DrumHit, { filter: BiquadFilterType; freq: number; level: number; durationScale: number }> = {
+  K: { filter: 'lowpass', freq: 150, level: 0.35, durationScale: 2.2 },
+  S: { filter: 'highpass', freq: 1800, level: 0.22, durationScale: 1.4 },
+  H: { filter: 'highpass', freq: 7000, level: 0.1, durationScale: 0.6 },
 };
 
 const LOOKAHEAD_SEC = 0.15;
@@ -44,9 +56,12 @@ export class ChiptuneAudio {
   private track: MusicTrackDef | null = null;
   private lead: string[] = [];
   private bass: string[] = [];
+  private drums: string[] = [];
   private step = 0;
   private nextStepTime = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** Секунда белого шума — источник для всех ударных и шага; переиспользуется, а не создаётся заново. */
+  private noiseBuffer: AudioBuffer | null = null;
 
   /** Браузеры разрешают звук только после жеста пользователя — вызывать из обработчика клика/клавиши. */
   unlock(): void {
@@ -85,6 +100,7 @@ export class ChiptuneAudio {
     this.track = track;
     this.lead = track ? track.lead.split(/\s+/) : [];
     this.bass = track ? track.bass.split(/\s+/) : [];
+    this.drums = track ? track.drums.split(/\s+/) : [];
     this.step = 0;
     this.nextStepTime = 0;
     if (track && this.timer === null) this.timer = setInterval(this.schedule, TICK_MS);
@@ -96,6 +112,10 @@ export class ChiptuneAudio {
 
   playSfx(name: SfxName): void {
     if (!this.ctx || !this.sfxGain) return;
+    if (name === 'step') {
+      this.noise(this.sfxGain, this.ctx.currentTime, 0.05, 'lowpass', 900, 0.12);
+      return;
+    }
     const sfx = SFX[name];
     let time = this.ctx.currentTime;
     for (const [frequency, duration] of sfx.tones) {
@@ -112,8 +132,13 @@ export class ChiptuneAudio {
     while (this.nextStepTime < ctx.currentTime + LOOKAHEAD_SEC) {
       const lead = noteToFrequency(this.lead[this.step % this.lead.length] ?? '-');
       const bass = noteToFrequency(this.bass[this.step % this.bass.length] ?? '-');
+      const drumToken = this.drums[this.step % this.drums.length];
+      const drumHit = drumToken && drumToken in DRUMS ? DRUMS[drumToken as DrumHit] : null;
       if (lead !== null) this.tone(musicGain, 'square', lead, this.nextStepTime, stepSec * 1.6, 0.11);
       if (bass !== null) this.tone(musicGain, 'triangle', bass, this.nextStepTime, stepSec * 1.9, 0.22);
+      if (drumHit) {
+        this.noise(musicGain, this.nextStepTime, stepSec * drumHit.durationScale, drumHit.filter, drumHit.freq, drumHit.level);
+      }
       this.step += 1;
       this.nextStepTime += stepSec;
     }
@@ -131,6 +156,39 @@ export class ChiptuneAudio {
     oscillator.connect(envelope).connect(output);
     oscillator.start(start);
     oscillator.stop(start + duration + 0.02);
+  }
+
+  /** Секунда случайных сэмплов — общий «сырой» шум для всех ударных и шагов, форма задаётся фильтром. */
+  private ensureNoiseBuffer(ctx: AudioContext): AudioBuffer {
+    if (this.noiseBuffer) return this.noiseBuffer;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    this.noiseBuffer = buffer;
+    return buffer;
+  }
+
+  private noise(
+    output: GainNode,
+    start: number,
+    duration: number,
+    filterType: BiquadFilterType,
+    filterFrequency: number,
+    level: number,
+  ): void {
+    if (!this.ctx) return;
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.ensureNoiseBuffer(this.ctx);
+    source.loop = true;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.value = filterFrequency;
+    const envelope = this.ctx.createGain();
+    envelope.gain.setValueAtTime(level, start);
+    envelope.gain.linearRampToValueAtTime(0, start + duration);
+    source.connect(filter).connect(envelope).connect(output);
+    source.start(start);
+    source.stop(start + duration + 0.02);
   }
 
   private applyVolumes(): void {

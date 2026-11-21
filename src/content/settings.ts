@@ -11,6 +11,7 @@ export const settings: Record<string, SettingDef> = {
     description: 'Тихие луга, с которых начинается путь Странника.',
     backgroundColor: 0x2f6b3a,
     music: 'fields',
+    musicAlt: 'fields2',
     tiles: {
       '.': { name: 'Трава', solid: false, color: 0x4c9a4a, accent: 0x3f8640, pattern: 'speckle' },
       ',': { name: 'Цветы', solid: false, color: 0x4c9a4a, accent: 0xf2d94e, pattern: 'speckle' },
@@ -27,6 +28,7 @@ export const settings: Record<string, SettingDef> = {
     description: 'Тесные отсеки, гул турбин и свет иллюминаторов.',
     backgroundColor: 0x0b1e33,
     music: 'submarine',
+    musicAlt: 'submarine2',
     tiles: {
       '.': { name: 'Палуба', solid: false, color: 0x5a6b7a, accent: 0x4a5a68, pattern: 'grid' },
       '#': { name: 'Корпус', solid: true, color: 0x2c3a47, accent: 0x1d2831, pattern: 'bricks' },
@@ -41,6 +43,7 @@ export const settings: Record<string, SettingDef> = {
     description: 'Каменные залы, где ждёт Хранитель Колоды.',
     backgroundColor: 0x17131f,
     music: 'castle',
+    musicAlt: 'castle2',
     tiles: {
       '.': { name: 'Каменный пол', solid: false, color: 0x6b6477, accent: 0x5a5466, pattern: 'grid' },
       '=': { name: 'Ковёр', solid: false, color: 0x9c2b3a, accent: 0xd9a441, pattern: 'planks' },
@@ -56,6 +59,7 @@ export const settings: Record<string, SettingDef> = {
     description: 'Орбитальная станция на краю известных миров.',
     backgroundColor: 0x05060f,
     music: 'space',
+    musicAlt: 'space2',
     tiles: {
       '.': { name: 'Панель', solid: false, color: 0x8892a6, accent: 0x6d778c, pattern: 'grid' },
       '#': { name: 'Переборка', solid: true, color: 0x3b4254, accent: 0x272c3a, pattern: 'bricks' },

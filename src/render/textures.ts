@@ -112,3 +112,9 @@ export const ensureIconTexture = (
   texture.refresh();
   return key;
 };
+
+export const PARTICLE_TEXTURE = 'particle-dot';
+
+/** Белая точка 3×3 — один спрайт для всех частиц, цвет красится через `tint` при эмиссии. */
+export const ensureParticleTexture = (scene: Phaser.Scene): string =>
+  ensureIconTexture(scene, PARTICLE_TEXTURE, 3, 3, [{ color: 0xffffff, rects: [[0, 0, 3, 3]] }]);

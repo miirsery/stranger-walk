@@ -2,6 +2,7 @@ import * as Phaser from 'phaser';
 import type { WorldObjectDef } from '@core/content/types';
 import type { SessionEvent } from '@core/session/gameSession';
 import { TILE_SIZE, tileCenter } from '@core/world/tileMap';
+import { audio } from '@/audio/chiptune';
 import type { RenderContext } from '../context';
 import { getRenderContext, SCENE_KEYS } from '../context';
 import type { Facing } from '@core/world/world';
@@ -9,8 +10,10 @@ import {
   characterFrame,
   ensureCharacterTexture,
   ensureIconTexture,
+  ensureParticleTexture,
   ensureTilesetTexture,
   isAnimatedTile,
+  PARTICLE_TEXTURE,
 } from '../textures';
 
 const CAMERA_LERP = 0.12;
@@ -20,6 +23,30 @@ const TILE_FRAME_MS = 500;
 const NPC_NOTICE_RANGE = TILE_SIZE * 3;
 
 const INK = 0x14121f;
+
+interface SimpleParticle {
+  sprite: Phaser.GameObjects.Image;
+  vx: number;
+  vy: number;
+  bornAt: number;
+  lifespan: number;
+  scaleFrom: number;
+  alphaFrom: number;
+}
+
+type AmbientKind = 'spark' | 'splash';
+
+interface AmbientSource {
+  x: number;
+  y: number;
+  kind: AmbientKind;
+  nextAt: number;
+}
+
+/** min..max — случайный разброс значения. */
+const between = (min: number, max: number): number => min + Math.random() * (max - min);
+
+const AMBIENT_FREQUENCY_MS: Record<AmbientKind, number> = { spark: 350, splash: 650 };
 
 /** Сцена мира: тайловая карта, NPC, игрок и камера, плавно следующая за ним. */
 export class WorldScene extends Phaser.Scene {
@@ -34,6 +61,14 @@ export class WorldScene extends Phaser.Scene {
   private tileCount = 0;
   private tileFrame = 0;
   private unsubscribe: (() => void) | null = null;
+  private lastStepPhase = 0;
+  /**
+   * Свои частицы поверх обычных Image: штатный Phaser ParticleEmitter в 4.2.1 не рисуется,
+   * пока камера скроллит (проверено — эмиттер со scrollFactor(0) рисуется, без него нет).
+   */
+  private particles: SimpleParticle[] = [];
+  /** Источники факелов и воды — спавнят частицы по таймеру, пересобираются с картой. */
+  private ambientSources: AmbientSource[] = [];
 
   constructor() {
     super(SCENE_KEYS.world);
@@ -45,6 +80,8 @@ export class WorldScene extends Phaser.Scene {
 
     const playerKey = ensureCharacterTexture(this, 'char-player', session.content.data.player.look);
     this.player = this.add.sprite(0, 0, playerKey, 0).setDepth(10);
+
+    ensureParticleTexture(this);
 
     const promptKey = ensureIconTexture(this, 'icon-prompt', 7, 9, [
       { color: 0x14121f, rects: [[0, 0, 7, 9]] },
@@ -116,8 +153,16 @@ export class WorldScene extends Phaser.Scene {
 
     const state = session.world.player;
     this.player.setPosition(Math.round(state.x), Math.round(state.y) - 2);
-    const step = state.moving && Math.floor(this.time.now / STEP_FRAME_MS) % 2 === 1 ? 1 : 0;
+    const stepPhase = Math.floor(this.time.now / STEP_FRAME_MS) % 2;
+    const step = state.moving && stepPhase === 1 ? 1 : 0;
     this.player.setFrame(characterFrame(state.facing, step));
+
+    // След пыли — залпом на каждую смену фазы шага, пока игрок идёт.
+    if (state.moving && stepPhase !== this.lastStepPhase) {
+      this.spawnDust(state.x, state.y + 6);
+      audio.playSfx('step');
+    }
+    this.lastStepPhase = stepPhase;
 
     const prompt = session.interactionPrompt();
     this.prompt.setVisible(prompt !== null);
@@ -148,6 +193,8 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.animateTiles();
+    this.updateAmbientSources();
+    this.updateParticles(delta);
   }
 
   /** Текстура объекта с учётом его текущего состояния (открыт сундук/дверь, потянут ли рычаг). */
@@ -162,6 +209,103 @@ export class WorldScene extends Phaser.Scene {
         return session.isDoorOpen(object.id) ? 'object-door-open' : 'object-door';
       case 'lever':
         return object.opens.every((doorId) => session.isDoorOpen(doorId)) ? 'object-lever-pulled' : 'object-lever';
+    }
+  }
+
+  /** Запускает один спрайт-частицу: летит по вектору, тускнеет и исчезает за `lifespan` мс. */
+  private spawnParticle(
+    x: number,
+    y: number,
+    opts: { tint: number; vx: number; vy: number; lifespan: number; scale: number; alpha: number; depth: number },
+  ): void {
+    const sprite = this.add
+      .image(x, y, PARTICLE_TEXTURE)
+      .setTint(opts.tint)
+      .setScale(opts.scale)
+      .setAlpha(opts.alpha)
+      .setDepth(opts.depth);
+    this.particles.push({
+      sprite,
+      vx: opts.vx,
+      vy: opts.vy,
+      bornAt: this.time.now,
+      lifespan: opts.lifespan,
+      scaleFrom: opts.scale,
+      alphaFrom: opts.alpha,
+    });
+  }
+
+  /** След пыли под ногами идущего игрока. */
+  private spawnDust(x: number, y: number): void {
+    for (let i = 0; i < 2; i++) {
+      const angle = Phaser.Math.DegToRad(between(200, 340));
+      const speed = between(6, 18);
+      this.spawnParticle(x, y, {
+        tint: 0xc9a66b,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        lifespan: 260,
+        scale: 1,
+        alpha: 0.5,
+        depth: 9,
+      });
+    }
+  }
+
+  /** Искра у факела или капля над водой, в зависимости от вида источника. */
+  private spawnAmbientParticle(source: AmbientSource): void {
+    const angle = Phaser.Math.DegToRad(between(255, 285));
+    if (source.kind === 'spark') {
+      const speed = between(4, 10);
+      this.spawnParticle(source.x, source.y - 4, {
+        tint: Math.random() < 0.5 ? 0xf2a33a : 0xffe066,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        lifespan: 500,
+        scale: 1,
+        alpha: 1,
+        depth: 6,
+      });
+    } else {
+      const speed = between(2, 6);
+      this.spawnParticle(source.x, source.y, {
+        tint: 0xf2fbff,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        lifespan: 700,
+        scale: 1.3,
+        alpha: 0.9,
+        depth: 3,
+      });
+    }
+  }
+
+  /** Запускает частицу из каждого источника, время которого пришло. */
+  private updateAmbientSources(): void {
+    for (const source of this.ambientSources) {
+      if (this.time.now < source.nextAt) continue;
+      this.spawnAmbientParticle(source);
+      source.nextAt = this.time.now + AMBIENT_FREQUENCY_MS[source.kind];
+    }
+  }
+
+  /** Двигает частицы и гасит их по возрасту; угасшие — уничтожает и убирает из списка. */
+  private updateParticles(delta: number): void {
+    const dt = delta / 1000;
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const particle = this.particles[i];
+      if (!particle) continue;
+      const age = this.time.now - particle.bornAt;
+      if (age >= particle.lifespan) {
+        particle.sprite.destroy();
+        this.particles.splice(i, 1);
+        continue;
+      }
+      const t = age / particle.lifespan;
+      particle.sprite.x += particle.vx * dt;
+      particle.sprite.y += particle.vy * dt;
+      particle.sprite.setScale(particle.scaleFrom * (1 - t));
+      particle.sprite.setAlpha(particle.alphaFrom * (1 - t));
     }
   }
 
@@ -184,9 +328,12 @@ export class WorldScene extends Phaser.Scene {
     this.map?.destroy();
     for (const { sprite } of this.npcSprites) sprite.destroy();
     for (const { sprite } of this.objectSprites) sprite.destroy();
+    for (const particle of this.particles) particle.sprite.destroy();
     this.npcSprites = [];
     this.objectSprites = [];
     this.animatedTiles = [];
+    this.ambientSources = [];
+    this.particles = [];
     this.tileFrame = 0;
     this.tileCount = tileMap.tileChars.length;
 
@@ -198,6 +345,12 @@ export class WorldScene extends Phaser.Scene {
         row.push(index);
         const tile = tileMap.tileAt(x, y);
         if (tile && isAnimatedTile(tile)) this.animatedTiles.push({ x, y, index });
+        // Искры у факелов, брызги у воды — тайлы различаются только названием и узором анимации.
+        const kind: AmbientKind | null = tile?.name === 'Факел' ? 'spark' : tile?.pattern === 'waves' ? 'splash' : null;
+        if (kind) {
+          const center = tileCenter({ x, y });
+          this.ambientSources.push({ x: center.x, y: center.y, kind, nextAt: this.time.now + between(0, AMBIENT_FREQUENCY_MS[kind]) });
+        }
       }
       data.push(row);
     }
