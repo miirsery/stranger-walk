@@ -4,8 +4,10 @@ import type { Facing } from '@core/world/world';
 import { TILE_SIZE } from '@core/world/tileMap';
 
 /**
- * Процедурные текстуры-заглушки. Пока художник не нарисовал спрайты, тайлы и персонажи
- * генерируются из цветов, описанных в контенте. Замена на настоящие атласы — только в этом файле.
+ * Тайлы и персонажи, для которых есть настоящий арт (`public/assets/characters`,
+ * `public/assets/tiles`), рисуются им; для остальных — старая процедурная заглушка
+ * из цветов контента. Вся эта развилка — только в этом файле, остальной рендер не знает,
+ * откуда взялась текстура.
  */
 
 const css = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
@@ -16,6 +18,55 @@ type Rect = readonly [x: number, y: number, w: number, h: number];
 const fill = (ctx: CanvasRenderingContext2D, ox: number, color: string, rects: readonly Rect[]): void => {
   ctx.fillStyle = color;
   for (const [x, y, w, h] of rects) ctx.fillRect(ox + x, y, w, h);
+};
+
+type ArtSource = HTMLImageElement | HTMLCanvasElement;
+
+const isArtSource = (value: unknown): value is ArtSource =>
+  value instanceof HTMLImageElement || value instanceof HTMLCanvasElement;
+
+/** Уже загруженное (через `preloadArt`) изображение по ключу — или `null`, если его нет/не загрузилось. */
+const getArtSource = (scene: Phaser.Scene, key: string): ArtSource | null => {
+  if (!scene.textures.exists(key)) return null;
+  const source = scene.textures.get(key).getSourceImage();
+  return isArtSource(source) ? source : null;
+};
+
+const drawArt = (ctx: CanvasRenderingContext2D, source: ArtSource, ox: number, size: number): void => {
+  ctx.drawImage(source, ox, 0, size, size);
+};
+
+/** Персонажи, для которых нарисован арт (`public/assets/characters/<id>.png`). */
+const CHARACTER_ART_IDS = [
+  'player', 'elder', 'farmer', 'beekeeper', 'captain', 'engineer', 'trader', 'keeper', 'void_captain',
+] as const;
+
+const characterArtKey = (id: string): string => `art-char-${id}`;
+const hasCharacterArt = (id: string): boolean => (CHARACTER_ART_IDS as readonly string[]).includes(id);
+
+/** Тайлы, для которых нарисован арт (`public/assets/tiles/<сеттинг>_<слаг>.png`). */
+const TILE_ART_CHARS: Record<string, string[]> = {
+  fields: ['.', ',', '=', '#', '~', 'F', 'D'],
+  submarine: ['.', '#', 'o', '=', 'D'],
+  castle: ['.', '=', '#', 'T', 'D'],
+  space: ['.', '#', '*', 'D'],
+};
+/** Некоторые символы тайлов — не годные имена файлов, храним их арт под читаемым слагом. */
+const TILE_SLUGS: Record<string, string> = { '.': 'dot', ',': 'comma', '=': 'eq', '#': 'hash', '~': 'tilde', '*': 'star' };
+const tileSlug = (char: string): string => TILE_SLUGS[char] ?? char;
+const tileArtKey = (settingId: string, char: string): string => `art-tile-${settingId}-${tileSlug(char)}`;
+const hasTileArt = (settingId: string, char: string): boolean => (TILE_ART_CHARS[settingId] ?? []).includes(char);
+
+/**
+ * Ставит в очередь загрузки весь имеющийся арт персонажей и тайлов. Вызывать один раз
+ * из `preload()` сцены — к моменту `create()` `getArtSource` уже найдёт готовые текстуры.
+ */
+export const preloadArt = (scene: Phaser.Scene): void => {
+  const base: string = import.meta.env.BASE_URL;
+  for (const id of CHARACTER_ART_IDS) scene.load.image(characterArtKey(id), `${base}assets/characters/${id}.png`);
+  for (const [settingId, chars] of Object.entries(TILE_ART_CHARS)) {
+    for (const char of chars) scene.load.image(tileArtKey(settingId, char), `${base}assets/tiles/${settingId}_${tileSlug(char)}.png`);
+  }
 };
 
 const PATTERNS: Record<TileDef['pattern'], readonly Rect[]> = {
@@ -47,13 +98,19 @@ export const tilesetKey = (settingId: string): string => `tiles-${settingId}`;
 export const ensureTilesetTexture = (scene: Phaser.Scene, setting: SettingDef): string => {
   const key = tilesetKey(setting.id);
   if (scene.textures.exists(key)) return key;
-  const tiles = Object.values(setting.tiles);
-  const texture = scene.textures.createCanvas(key, tiles.length * 2 * TILE_SIZE, TILE_SIZE);
+  const entries = Object.entries(setting.tiles);
+  const texture = scene.textures.createCanvas(key, entries.length * 2 * TILE_SIZE, TILE_SIZE);
   if (!texture) throw new Error(`Не удалось создать текстуру ${key}`);
   const ctx = texture.getContext();
   for (const frame of [0, 1] as const) {
-    tiles.forEach((tile, index) => {
-      const ox = (frame * tiles.length + index) * TILE_SIZE;
+    entries.forEach(([char, tile], index) => {
+      const ox = (frame * entries.length + index) * TILE_SIZE;
+      const art = hasTileArt(setting.id, char) ? getArtSource(scene, tileArtKey(setting.id, char)) : null;
+      if (art) {
+        // Нарисованных вторых кадров анимации нет — оба кадра показывают один и тот же арт.
+        drawArt(ctx, art, ox, TILE_SIZE);
+        return;
+      }
       const pattern = (frame === 1 ? ANIMATED_PATTERNS[tile.pattern] : undefined) ?? PATTERNS[tile.pattern];
       fill(ctx, ox, css(tile.color), [[0, 0, TILE_SIZE, TILE_SIZE]]);
       fill(ctx, ox, css(tile.accent), pattern);
@@ -68,11 +125,16 @@ const FACINGS: readonly Facing[] = ['down', 'up', 'left', 'right'];
 /** Номер кадра в текстуре персонажа: 4 направления × 2 кадра шага. */
 export const characterFrame = (facing: Facing, step: 0 | 1): number => FACINGS.indexOf(facing) * 2 + step;
 
-export const ensureCharacterTexture = (scene: Phaser.Scene, key: string, look: SpriteLook): string => {
+/**
+ * `id` — идентификатор персонажа в контенте (`player`, `npc.id`): по нему ищется готовый арт.
+ * Нарисованного кадра ходьбы нет — при наличии арта все 8 кадров показывают один и тот же рисунок.
+ */
+export const ensureCharacterTexture = (scene: Phaser.Scene, key: string, id: string, look: SpriteLook): string => {
   if (scene.textures.exists(key)) return key;
   const texture = scene.textures.createCanvas(key, TILE_SIZE * FACINGS.length * 2, TILE_SIZE);
   if (!texture) throw new Error(`Не удалось создать текстуру ${key}`);
   const ctx = texture.getContext();
+  const art = hasCharacterArt(id) ? getArtSource(scene, characterArtKey(id)) : null;
   const hat = css(look.hat);
   const skin = css(look.skin);
   const body = css(look.body);
@@ -81,14 +143,18 @@ export const ensureCharacterTexture = (scene: Phaser.Scene, key: string, look: S
     for (const step of [0, 1] as const) {
       const frame = facingIndex * 2 + step;
       const ox = frame * TILE_SIZE;
-      fill(ctx, ox, INK, [[3, 0, 10, 9], [2, 7, 12, 7]]);
-      fill(ctx, ox, skin, [[4, 3, 8, 5], [2, 9, 1, 3], [13, 9, 1, 3]]);
-      fill(ctx, ox, hat, facing === 'up' ? [[4, 1, 8, 6]] : [[4, 1, 8, 3]]);
-      fill(ctx, ox, body, [[3, 8, 10, 5]]);
-      if (facing === 'down') fill(ctx, ox, INK, [[6, 5, 1, 2], [9, 5, 1, 2]]);
-      if (facing === 'left') fill(ctx, ox, INK, [[5, 5, 1, 2]]);
-      if (facing === 'right') fill(ctx, ox, INK, [[10, 5, 1, 2]]);
-      fill(ctx, ox, INK, step === 0 ? [[5, 13, 2, 3], [9, 13, 2, 3]] : [[5, 13, 2, 3], [9, 13, 2, 1]]);
+      if (art) {
+        drawArt(ctx, art, ox, TILE_SIZE);
+      } else {
+        fill(ctx, ox, INK, [[3, 0, 10, 9], [2, 7, 12, 7]]);
+        fill(ctx, ox, skin, [[4, 3, 8, 5], [2, 9, 1, 3], [13, 9, 1, 3]]);
+        fill(ctx, ox, hat, facing === 'up' ? [[4, 1, 8, 6]] : [[4, 1, 8, 3]]);
+        fill(ctx, ox, body, [[3, 8, 10, 5]]);
+        if (facing === 'down') fill(ctx, ox, INK, [[6, 5, 1, 2], [9, 5, 1, 2]]);
+        if (facing === 'left') fill(ctx, ox, INK, [[5, 5, 1, 2]]);
+        if (facing === 'right') fill(ctx, ox, INK, [[10, 5, 1, 2]]);
+        fill(ctx, ox, INK, step === 0 ? [[5, 13, 2, 3], [9, 13, 2, 3]] : [[5, 13, 2, 3], [9, 13, 2, 1]]);
+      }
       texture.add(frame, 0, ox, 0, TILE_SIZE, TILE_SIZE);
     }
   });

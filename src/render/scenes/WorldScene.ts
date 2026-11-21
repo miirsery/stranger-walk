@@ -14,6 +14,7 @@ import {
   ensureTilesetTexture,
   isAnimatedTile,
   PARTICLE_TEXTURE,
+  preloadArt,
 } from '../textures';
 
 const CAMERA_LERP = 0.12;
@@ -74,11 +75,16 @@ export class WorldScene extends Phaser.Scene {
     super(SCENE_KEYS.world);
   }
 
+  /** Очередь загрузки готового арта — к моменту `create()` он уже на месте (см. `textures.ts`). */
+  preload(): void {
+    preloadArt(this);
+  }
+
   create(): void {
     this.ctx = getRenderContext(this);
     const { session } = this.ctx;
 
-    const playerKey = ensureCharacterTexture(this, 'char-player', session.content.data.player.look);
+    const playerKey = ensureCharacterTexture(this, 'char-player', 'player', session.content.data.player.look);
     this.player = this.add.sprite(0, 0, playerKey, 0).setDepth(10);
 
     ensureParticleTexture(this);
@@ -363,7 +369,7 @@ export class WorldScene extends Phaser.Scene {
 
     world.level.npcs.forEach((placement, index) => {
       const npc = content.npc(placement.npcId);
-      const key = ensureCharacterTexture(this, `char-${npc.id}`, npc.look);
+      const key = ensureCharacterTexture(this, `char-${npc.id}`, npc.id, npc.look);
       const view = world.npcView(index);
       const sprite = this.add.sprite(view.x, view.y - 2, key, characterFrame(view.facing, 0)).setDepth(5);
       this.npcSprites.push({ sprite, index });

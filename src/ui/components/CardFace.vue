@@ -3,6 +3,14 @@ import type { CardDef } from '@core/content/types';
 import { computed } from 'vue';
 import { KEYWORD_LABELS } from './cardKeywords';
 
+/** Карты, для которых нарисована иллюстрация (`public/assets/cards/<id>.png`) — для остальных буква на фоне. */
+const CARD_ART_IDS = new Set([
+  'sprout', 'scarecrow', 'fox', 'reaper', 'bull', 'feast', 'viper', 'hive',
+  'crab', 'torpedo', 'diver', 'kraken', 'mine', 'harpoon', 'depth_charge', 'jellyfish',
+  'squire', 'archer', 'knight', 'gargoyle', 'shadow', 'ghost', 'blessing', 'banner',
+  'drone', 'astronaut', 'turret', 'shield', 'titan', 'laser', 'star_map', 'comet', 'meteor',
+]);
+
 const props = defineProps<{
   card: CardDef;
   /** Текущие значения существа на столе; для карты в руке — не заданы. */
@@ -18,6 +26,7 @@ const props = defineProps<{
 const emit = defineEmits<{ inspectHover: []; inspectToggle: [] }>();
 
 const tintCss = computed(() => `#${props.tint.toString(16).padStart(6, '0')}`);
+const artUrl = computed(() => (CARD_ART_IDS.has(props.card.id) ? `${import.meta.env.BASE_URL}assets/cards/${props.card.id}.png` : null));
 const unit = computed(() => (props.card.type === 'unit' ? props.card : null));
 const attack = computed(() => props.attack ?? unit.value?.attack ?? 0);
 const health = computed(() => props.health ?? unit.value?.health ?? 0);
@@ -40,7 +49,10 @@ const buffed = computed(() => unit.value !== null && (health.value > unit.value.
       ?
     </span>
     <span class="card__cost" aria-label="Стоимость">{{ card.cost }}</span>
-    <span class="card__art" :style="{ background: tintCss }" aria-hidden="true">{{ card.name.charAt(0) }}</span>
+    <span class="card__art" :style="{ background: tintCss }" aria-hidden="true">
+      <img v-if="artUrl" :src="artUrl" class="card__art-img" alt="" />
+      <template v-else>{{ card.name.charAt(0) }}</template>
+    </span>
     <span class="card__name">{{ card.name }}</span>
     <span v-if="unit && unit.keywords.length" class="card__keywords">
       {{ unit.keywords.map((keyword) => KEYWORD_LABELS[keyword]).join(' · ') }}
@@ -129,12 +141,19 @@ const buffed = computed(() => unit.value !== null && (health.value > unit.value.
 
 .card__art {
   display: grid;
+  overflow: hidden;
   place-items: center;
   height: 40px;
   font-size: 16px;
   color: rgb(255 255 255 / 85%);
   text-shadow: 2px 2px 0 rgb(0 0 0 / 40%);
   border: 2px solid var(--ink);
+}
+
+.card__art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .card--compact .card__art {
