@@ -3,7 +3,7 @@ import type { CardDef } from '@core/content/types';
 import { computed } from 'vue';
 import { KEYWORD_LABELS } from './cardKeywords';
 
-/** Карты, для которых нарисована иллюстрация (`public/assets/cards/<id>.png`) — для остальных буква на фоне. */
+/** Карты, для которых нарисована иллюстрация (`public/assets/cards/<id>.webp`) — для остальных буква на фоне. */
 const CARD_ART_IDS = new Set([
   'sprout', 'scarecrow', 'fox', 'reaper', 'bull', 'feast', 'viper', 'hive',
   'crab', 'torpedo', 'diver', 'kraken', 'mine', 'harpoon', 'depth_charge', 'jellyfish',
@@ -26,7 +26,7 @@ const props = defineProps<{
 const emit = defineEmits<{ inspectHover: []; inspectToggle: [] }>();
 
 const tintCss = computed(() => `#${props.tint.toString(16).padStart(6, '0')}`);
-const artUrl = computed(() => (CARD_ART_IDS.has(props.card.id) ? `${import.meta.env.BASE_URL}assets/cards/${props.card.id}.png` : null));
+const artUrl = computed(() => (CARD_ART_IDS.has(props.card.id) ? `${import.meta.env.BASE_URL}assets/cards/${props.card.id}.webp` : null));
 const unit = computed(() => (props.card.type === 'unit' ? props.card : null));
 const attack = computed(() => props.attack ?? unit.value?.attack ?? 0);
 const health = computed(() => props.health ?? unit.value?.health ?? 0);

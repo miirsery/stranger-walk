@@ -5,7 +5,7 @@ import { TILE_SIZE } from '@core/world/tileMap';
 
 /**
  * Тайлы и персонажи, для которых есть настоящий арт (`public/assets/characters`,
- * `public/assets/tiles`), рисуются им; для остальных — старая процедурная заглушка
+ * `public/assets/tiles`, в WebP для меньшего веса сборки), рисуются им; для остальных — старая процедурная заглушка
  * из цветов контента. Вся эта развилка — только в этом файле, остальной рендер не знает,
  * откуда взялась текстура.
  */
@@ -36,7 +36,7 @@ const drawArt = (ctx: CanvasRenderingContext2D, source: ArtSource, ox: number, s
   ctx.drawImage(source, ox, 0, size, size);
 };
 
-/** Персонажи, для которых нарисован арт (`public/assets/characters/<id>.png`). */
+/** Персонажи, для которых нарисован арт (`public/assets/characters/<id>.webp`). */
 const CHARACTER_ART_IDS = [
   'player', 'elder', 'farmer', 'beekeeper', 'captain', 'engineer', 'trader', 'keeper', 'void_captain',
 ] as const;
@@ -44,7 +44,7 @@ const CHARACTER_ART_IDS = [
 const characterArtKey = (id: string): string => `art-char-${id}`;
 const hasCharacterArt = (id: string): boolean => (CHARACTER_ART_IDS as readonly string[]).includes(id);
 
-/** Тайлы, для которых нарисован арт (`public/assets/tiles/<сеттинг>_<слаг>.png`). */
+/** Тайлы, для которых нарисован арт (`public/assets/tiles/<сеттинг>_<слаг>.webp`). */
 const TILE_ART_CHARS: Record<string, string[]> = {
   fields: ['.', ',', '=', '#', '~', 'F', 'D'],
   submarine: ['.', '#', 'o', '=', 'D'],
@@ -63,9 +63,9 @@ const hasTileArt = (settingId: string, char: string): boolean => (TILE_ART_CHARS
  */
 export const preloadArt = (scene: Phaser.Scene): void => {
   const base: string = import.meta.env.BASE_URL;
-  for (const id of CHARACTER_ART_IDS) scene.load.image(characterArtKey(id), `${base}assets/characters/${id}.png`);
+  for (const id of CHARACTER_ART_IDS) scene.load.image(characterArtKey(id), `${base}assets/characters/${id}.webp`);
   for (const [settingId, chars] of Object.entries(TILE_ART_CHARS)) {
-    for (const char of chars) scene.load.image(tileArtKey(settingId, char), `${base}assets/tiles/${settingId}_${tileSlug(char)}.png`);
+    for (const char of chars) scene.load.image(tileArtKey(settingId, char), `${base}assets/tiles/${settingId}_${tileSlug(char)}.webp`);
   }
 };
 
