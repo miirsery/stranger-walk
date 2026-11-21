@@ -20,6 +20,15 @@ export const quests: Record<string, QuestDef> = {
     ],
     rewardCards: ['hive'],
   },
+  forest_path: {
+    id: 'forest_path',
+    title: 'Лесная тропа',
+    description: 'Найди того, кто шуршит в кустах у западной стены.',
+    objectives: [
+      { id: 'talk_hermit', text: 'Поговори с тем, кто живёт в лесу на западе', type: 'talkTo', npcId: 'hermit' },
+    ],
+    rewardCards: ['viper'],
+  },
   deep_cargo: {
     id: 'deep_cargo',
     title: 'Глубинный груз',

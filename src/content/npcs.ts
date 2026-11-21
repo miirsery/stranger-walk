@@ -21,9 +21,21 @@ export const npcs: Record<string, NpcDef> = {
         lines: ['Мирон ждёт тебя у загона на юго-востоке. Не заставляй урожай гнить.'],
       },
       {
+        when: [
+          { type: 'questStatus', questId: 'first_steps', status: 'completed' },
+          { type: 'questStatus', questId: 'forest_path', status: 'inactive' },
+        ],
         lines: [
           'Ты хорошо справился. Люк на востоке теперь открыт.',
           'Он ведёт на подлодку «Наутилус-8» — спроси капитана, чем помочь.',
+          'И ещё: в кустах у западной стены что-то шуршит. Если любопытно — сходи глянь.',
+        ],
+        effects: [{ type: 'startQuest', questId: 'forest_path' }],
+      },
+      {
+        lines: [
+          'Люк на востоке ведёт на подлодку «Наутилус-8».',
+          'А шорох в кустах на западе, если ты его уже нашёл, подождёт.',
         ],
       },
     ],
@@ -168,6 +180,26 @@ export const npcs: Record<string, NpcDef> = {
           },
         ],
       },
+    ],
+  },
+  hermit: {
+    id: 'hermit',
+    name: 'Лесник Яромир',
+    look: { body: 0x4a6b3a, skin: 0xe0ac7e, hat: 0x5c4a2e },
+    scripts: [
+      {
+        when: [{ type: 'questStatus', questId: 'forest_path', status: 'inactive' }],
+        lines: ['Чужого здесь не ждали.', 'Если тебя не посылал старейшина — проходи мимо, путник.'],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'forest_path', status: 'active' }],
+        lines: [
+          'А, это ты — старейшина предупреждал.',
+          'У поваленного дерева развёлся выводок гадюк, пока меня не было. Возьми одну — в бою пригодится.',
+          'Только осторожно: яд у неё не только для врагов.',
+        ],
+      },
+      { lines: ['Тропа заросла — значит, точно не ко мне.'] },
     ],
   },
   keeper: {

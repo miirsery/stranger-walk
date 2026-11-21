@@ -14,7 +14,7 @@ export const levels: Record<string, LevelDef> = {
       '#......,.......~~~~.#......#',
       '#..,..........~~~~~#.#.,...#',
       '#......##......~~~.........#',
-      '#......##..........,.......#',
+      'D......##..........,.......#',
       '#..,.........=====.........#',
       '#............=...=.....##..#',
       '#.....,......=...=.....##..#',
@@ -44,6 +44,7 @@ export const levels: Record<string, LevelDef> = {
         requires: [{ type: 'questStatus', questId: 'first_steps', status: 'completed' }],
         lockedText: 'Люк заперт. Старейшина говорил, что сначала нужно помочь на лугах.',
       },
+      { at: { x: 0, y: 4 }, toLevel: 'forest', toSpawn: { x: 12, y: 4 } },
     ],
     objects: [
       {
@@ -194,6 +195,33 @@ export const levels: Record<string, LevelDef> = {
       { id: 'vault_lever', type: 'lever', at: { x: 7, y: 3 }, opens: ['vault_door'] },
       { id: 'vault_door', type: 'door', at: { x: 10, y: 2 } },
       { id: 'vault_chest', type: 'chest', at: { x: 10, y: 3 }, choices: ['titan', 'barrier', 'turret'] },
+    ],
+  },
+  forest: {
+    id: 'forest',
+    name: 'Старый лес',
+    setting: 'fields',
+    rows: [
+      '##############',
+      '#..,......,..#',
+      '#....##..#...#',
+      '#....##..#...#',
+      '#....=.......D',
+      '#....#...#...#',
+      '#..,......,..#',
+      '#............#',
+      '##############',
+    ],
+    spawn: { x: 12, y: 4 },
+    npcs: [{ npcId: 'hermit', at: { x: 7, y: 2 } }],
+    portals: [{ at: { x: 13, y: 4 }, toLevel: 'meadow', toSpawn: { x: 1, y: 4 } }],
+    objects: [
+      {
+        id: 'forest_sign',
+        type: 'sign',
+        at: { x: 11, y: 5 },
+        lines: ['Старый лес.', 'Тропа петляет между деревьями — похоже, кто-то здесь всё же живёт.'],
+      },
     ],
   },
 };
