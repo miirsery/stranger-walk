@@ -8,7 +8,7 @@ import CardFace from './CardFace.vue';
 const props = defineProps<{ session: GameSession; quests: QuestView[] }>();
 defineEmits<{ close: [] }>();
 
-type Tab = 'quests' | 'collection';
+type Tab = 'quests' | 'collection' | 'achievements' | 'bestiary';
 const tab = ref<Tab>('quests');
 
 const sortedQuests = computed(() =>
@@ -44,6 +44,12 @@ const totalCards = computed(() => groups.value.reduce((sum, group) => sum + grou
 const foundCards = computed(() =>
   groups.value.reduce((sum, group) => sum + group.entries.filter((entry) => entry.owned > 0).length, 0),
 );
+
+const achievements = computed(() => props.session.achievements());
+const doneAchievements = computed(() => achievements.value.filter((entry) => entry.done).length);
+
+const bestiary = computed(() => props.session.bestiary());
+const metBosses = computed(() => bestiary.value.filter((entry) => entry.met).length);
 </script>
 
 <template>
@@ -71,8 +77,37 @@ const foundCards = computed(() =>
           >
             Карты {{ foundCards }}/{{ totalCards }}
           </button>
+          <button
+            type="button"
+            role="tab"
+            class="pixel-button"
+            :class="{ 'pixel-button--ghost': tab !== 'achievements' }"
+            :aria-selected="tab === 'achievements'"
+            @click="tab = 'achievements'"
+          >
+            Достижения {{ doneAchievements }}/{{ achievements.length }}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="pixel-button"
+            :class="{ 'pixel-button--ghost': tab !== 'bestiary' }"
+            :aria-selected="tab === 'bestiary'"
+            @click="tab = 'bestiary'"
+          >
+            Бестиарий {{ metBosses }}/{{ bestiary.length }}
+          </button>
         </div>
-        <button type="button" class="pixel-button" autofocus @click="$emit('close')">Закрыть</button>
+        <div class="journal__header-end">
+          <span v-if="session.newGamePlus > 0" class="journal__cycle">New Game+{{ session.newGamePlus }}</span>
+          <span
+            class="journal__reputation"
+            :class="session.reputation > 0 ? 'journal__reputation--good' : session.reputation < 0 ? 'journal__reputation--bad' : ''"
+          >
+            Репутация {{ session.reputation > 0 ? '+' : '' }}{{ session.reputation }}
+          </span>
+          <button type="button" class="pixel-button" autofocus @click="$emit('close')">Закрыть</button>
+        </div>
       </header>
 
       <div v-if="tab === 'quests'" class="journal__body" role="tabpanel">
@@ -98,7 +133,7 @@ const foundCards = computed(() =>
         </article>
       </div>
 
-      <div v-else class="journal__body" role="tabpanel">
+      <div v-else-if="tab === 'collection'" class="journal__body" role="tabpanel">
         <section v-for="group in groups" :key="group.settingName" class="journal__group">
           <h2 class="journal__group-title">{{ group.settingName }}</h2>
           <ul class="journal__cards">
@@ -111,6 +146,35 @@ const foundCards = computed(() =>
             </li>
           </ul>
         </section>
+      </div>
+
+      <div v-else-if="tab === 'achievements'" class="journal__body" role="tabpanel">
+        <article
+          v-for="achievement in achievements"
+          :key="achievement.id"
+          class="journal__achievement"
+          :class="{ 'journal__achievement--done': achievement.done }"
+        >
+          <span aria-hidden="true">{{ achievement.done ? '★' : '☆' }}</span>
+          <div>
+            <h2 class="journal__achievement-title">{{ achievement.title }}</h2>
+            <p class="journal__description">{{ achievement.description }}</p>
+          </div>
+        </article>
+      </div>
+
+      <div v-else class="journal__body" role="tabpanel">
+        <article v-for="entry in bestiary" :key="entry.boss.id" class="journal__boss">
+          <template v-if="entry.met">
+            <h2 class="journal__boss-title">
+              {{ entry.boss.name }}
+              <span class="journal__status">{{ entry.boss.title }}</span>
+              <span v-if="entry.defeated" class="journal__status journal__status--done">повержен</span>
+            </h2>
+            <p class="journal__description">{{ entry.boss.lore }}</p>
+          </template>
+          <p v-else class="journal__unknown-boss">? ещё не встречен</p>
+        </article>
       </div>
     </div>
   </div>
@@ -149,6 +213,30 @@ const foundCards = computed(() =>
   gap: 8px;
 }
 
+.journal__header-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.journal__cycle {
+  font-size: 8px;
+  color: var(--gold);
+}
+
+.journal__reputation {
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.journal__reputation--good {
+  color: var(--green);
+}
+
+.journal__reputation--bad {
+  color: var(--red);
+}
+
 .journal__body {
   display: grid;
   gap: 20px;
@@ -182,6 +270,40 @@ const foundCards = computed(() =>
 }
 
 .journal__description {
+  color: var(--muted);
+}
+
+.journal__achievement {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  opacity: 0.6;
+}
+
+.journal__achievement--done {
+  opacity: 1;
+}
+
+.journal__achievement-title {
+  font-size: 10px;
+  color: var(--gold);
+}
+
+.journal__boss {
+  display: grid;
+  gap: 8px;
+}
+
+.journal__boss-title {
+  font-size: 11px;
+  color: var(--blue);
+}
+
+.journal__status--done {
+  color: var(--green);
+}
+
+.journal__unknown-boss {
   color: var(--muted);
 }
 

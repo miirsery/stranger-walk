@@ -12,6 +12,7 @@ export type CardId = string;
 export type BossId = string;
 export type MinigameId = string;
 export type TrackId = string;
+export type ArtifactId = string;
 
 /** Координаты в тайлах. */
 export interface Point {
@@ -57,12 +58,43 @@ export type QuestStatus = 'inactive' | 'active' | 'completed';
 /** Условия, по которым выбираются реплики NPC и открываются порталы. */
 export type Condition =
   | { type: 'questStatus'; questId: QuestId; status: QuestStatus }
-  | { type: 'bossDefeated'; bossId: BossId; value: boolean };
+  | { type: 'bossDefeated'; bossId: BossId; value: boolean }
+  /** Свободный флаг истории — ставится эффектом `setFlag`, обычно выбором в ветвящемся диалоге. */
+  | { type: 'flag'; flagId: string; value: boolean }
+  /**
+   * Репутация — число, растущее и падающее от мелких поступков (`changeReputation`).
+   * Границы включительные; хотя бы одна должна быть задана. Сценарии NPC проверяют её
+   * по порядку от самой требовательной к самой мягкой — первый подходящий побеждает.
+   */
+  | { type: 'reputation'; atLeast?: number; atMost?: number };
 
 /** Предложение торговца: карта за столько-то монет. */
 export interface TradeOffer {
   cardId: CardId;
   price: number;
+}
+
+/** Предложение торговца: артефакт за столько-то монет. */
+export interface ArtifactOffer {
+  artifactId: ArtifactId;
+  price: number;
+}
+
+/**
+ * Пассивный эффект экипированного артефакта — действует на героя весь бой,
+ * пока артефакт не снят. Один слот: экипирован максимум один артефакт за раз.
+ */
+export type ArtifactEffect =
+  | { type: 'heroHealth'; amount: number }
+  | { type: 'powerCostDelta'; amount: number }
+  | { type: 'rageGainBonus'; amount: number };
+
+/** Экипировка вне боя — не карта и не занимает место в колоде. */
+export interface ArtifactDef {
+  id: ArtifactId;
+  name: string;
+  description: string;
+  effect: ArtifactEffect;
 }
 
 /** Действия, которые запускаются после диалога. */
@@ -71,13 +103,29 @@ export type Effect =
   | { type: 'startMinigame'; minigameId: MinigameId }
   | { type: 'startBattle'; bossId: BossId }
   | { type: 'grantCards'; cardIds: CardId[] }
-  | { type: 'openTrade'; offers: TradeOffer[] };
+  | { type: 'openTrade'; offers: TradeOffer[]; artifactOffers?: ArtifactOffer[] }
+  /** Ставит свободный флаг истории — обычно следствие выбора в ветвящемся диалоге. */
+  | { type: 'setFlag'; flagId: string }
+  /** Небольшой сдвиг репутации (может быть отрицательным) — мелкий добрый или плохой поступок. */
+  | { type: 'changeReputation'; amount: number };
+
+/**
+ * Вариант ответа в конце реплик сценария: свои реплики и свои последствия вместо общих
+ * `effects` — выбор в диалоге меняет награду или оставляет флаг для будущих визитов.
+ */
+export interface DialogChoice {
+  text: string;
+  lines: string[];
+  effects?: Effect[];
+}
 
 export interface NpcScript {
   /** Все условия должны выполняться. Без условий — сценарий подходит всегда. */
   when?: Condition[];
   lines: string[];
   effects?: Effect[];
+  /** Выбор по окончании `lines`: вместо возврата в мир показываются варианты ответа. */
+  choices?: DialogChoice[];
 }
 
 export interface NpcDef {
@@ -111,7 +159,8 @@ export interface PortalDef {
  */
 export type WorldObjectDef = { id: string; at: Point } & (
   | { type: 'sign'; lines: string[] }
-  | { type: 'chest'; choices: CardId[] }
+  /** `guaranteed` — карты сверх выбора, выдаются все разом вместе с выбранной. */
+  | { type: 'chest'; choices: CardId[]; guaranteed?: CardId[] }
   | { type: 'door' }
   | { type: 'lever'; opens: string[] }
 );
@@ -244,6 +293,8 @@ export interface BossDef extends ChoiceReward {
   id: BossId;
   name: string;
   title: string;
+  /** Абзац предыстории для бестиария — открывается после первой же встречи, не только победы. */
+  lore: string;
   setting: SettingId;
   health: number;
   deck: CardId[];
@@ -290,8 +341,61 @@ export interface MemoryMinigameDef extends ChoiceReward {
   rewardCards: CardId[];
 }
 
+/** «Рыбалка»: держи поплавок у рыбы, пока шкала поимки не заполнится, до конца таймера. */
+export interface FishingMinigameDef extends ChoiceReward {
+  id: MinigameId;
+  type: 'fishing';
+  name: string;
+  instructions: string;
+  durationMs: number;
+  /** Скорость всплытия поплавка при зажатом «вверх», условные пиксели поля в секунду. */
+  reelSpeed: number;
+  /** Скорость погружения поплавка без удержания, условные пиксели поля в секунду. */
+  gravity: number;
+  /** Скорость рыбы, условные пиксели поля в секунду. */
+  fishSpeed: number;
+  /** Вероятность смены направления рыбы за секунду, 0..1. */
+  fishTurnChance: number;
+  /** Рост шкалы поимки в секунду, пока рыба у поплавка. */
+  catchRate: number;
+  /** Падение шкалы поимки в секунду, пока рыба не у поплавка. */
+  escapeRate: number;
+  music: TrackId;
+  rewardCards: CardId[];
+}
+
+/** «Ритм»: жми «действие» точно в такт по шаблону `pattern` — пропусков не больше `maxMisses`. */
+export interface RhythmMinigameDef extends ChoiceReward {
+  id: MinigameId;
+  type: 'rhythm';
+  name: string;
+  instructions: string;
+  /** Темп в ударах в минуту — должен совпадать с `bpm` трека `music`, одна шестнадцатая = один токен `pattern`. */
+  bpm: number;
+  /** Ноты через пробел: `X` — нота, `-` — пауза. Те же шестнадцатые, что и партии трека. */
+  pattern: string;
+  /** Насколько близко по времени (мс) должно быть нажатие, чтобы засчитать ноту. */
+  hitWindowMs: number;
+  maxMisses: number;
+  music: TrackId;
+  rewardCards: CardId[];
+}
+
+/** «Пятнашки»: собери числа по порядку, двигая плитки в пустую клетку, не больше `maxMoves` ходов. */
+export interface SlideMinigameDef extends ChoiceReward {
+  id: MinigameId;
+  type: 'slide';
+  name: string;
+  instructions: string;
+  /** Сторона квадратного поля — например, 3 для поля 3×3 (8 плиток и пустая клетка). */
+  size: number;
+  maxMoves: number;
+  music: TrackId;
+  rewardCards: CardId[];
+}
+
 /** Новые типы мини-игр добавляются в это объединение (и в фабрику `createMinigame`). */
-export type MinigameDef = CatchMinigameDef | MemoryMinigameDef;
+export type MinigameDef = CatchMinigameDef | MemoryMinigameDef | FishingMinigameDef | RhythmMinigameDef | SlideMinigameDef;
 
 // ---------- Музыка ----------
 
@@ -317,7 +421,16 @@ export interface PlayerDef {
   heroHealth: number;
   power?: HeroPowerDef;
   startLevel: LevelId;
+  /** Колода по умолчанию — для старых вызовов и восстановления сохранений без выбора. */
   starterDeck: CardId[];
+}
+
+/** Один из вариантов стартовой колоды, предлагаемых при начале новой игры. */
+export interface StarterDeckDef {
+  id: string;
+  name: string;
+  description: string;
+  cards: CardId[];
 }
 
 export interface StoryChapter {
@@ -332,9 +445,22 @@ export interface HintDef {
   text: string;
 }
 
+/**
+ * Секретная «истинная» концовка: нужно собрать все карты из `requiredCards` (по одной
+ * редкой карте-тайнику на сеттинг) до победы над финальным боссом — тогда `lines`
+ * добавляются к обычному эпилогу финального босса (`BossDef.finale`), а не заменяют его.
+ */
+export interface SecretEndingDef {
+  requiredCards: CardId[];
+  title: string;
+  lines: string[];
+}
+
 export interface GameContent {
   player: PlayerDef;
   deckRules: DeckRules;
+  /** Варианты стартовой колоды на выбор при начале новой игры. */
+  starterDecks: StarterDeckDef[];
   settings: Record<SettingId, SettingDef>;
   levels: Record<LevelId, LevelDef>;
   npcs: Record<NpcId, NpcDef>;
@@ -342,7 +468,9 @@ export interface GameContent {
   cards: Record<CardId, CardDef>;
   bosses: Record<BossId, BossDef>;
   minigames: Record<MinigameId, MinigameDef>;
+  artifacts: Record<ArtifactId, ArtifactDef>;
   music: Record<TrackId, MusicTrackDef>;
   story: StoryChapter[];
   hints: HintDef[];
+  secretEnding: SecretEndingDef;
 }

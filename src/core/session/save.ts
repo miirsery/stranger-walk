@@ -30,6 +30,24 @@ export interface SaveData {
   coins: number;
   /** Уровни, для которых уже показана вступительная сцена из `story.ts`. */
   seenChapters: string[];
+  /** Сколько раз игрок начинал New Game+ (0 — обычное первое прохождение). */
+  newGamePlus: number;
+  /** Проигрывал ли игрок хоть раз бой (сдача засчитывается) — для достижения «без поражений». */
+  hasLostBattle: boolean;
+  /** id достижений, которые уже засчитаны — не отбираются даже после New Game+. */
+  unlockedAchievements: string[];
+  /** Боссы, с которыми игрок хоть раз сражался (победа не нужна) — открывает бестиарий. */
+  metBosses: string[];
+  /** Найденные (купленные) артефакты — экипировка вне боя, не карты. */
+  ownedArtifacts: string[];
+  /** Экипирован максимум один артефакт за раз, или null. */
+  equippedArtifactId: string | null;
+  /** Свободные флаги истории — обычно следствие выбора в ветвящемся диалоге. */
+  flags: string[];
+  /** Репутация — растёт и падает от мелких поступков, меняет реакцию и цены у NPC. */
+  reputation: number;
+  /** Когда это сохранение последний раз записывалось (`Date.now()`) — для списка слотов. */
+  savedAt: number;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -84,5 +102,14 @@ export const parseSave = (raw: unknown): SaveData | null => {
     openedDoors: isStringArray(raw.openedDoors) ? raw.openedDoors : [],
     coins: typeof raw.coins === 'number' && Number.isInteger(raw.coins) && raw.coins >= 0 ? raw.coins : 0,
     seenChapters: isStringArray(raw.seenChapters) ? raw.seenChapters : [],
+    newGamePlus: typeof raw.newGamePlus === 'number' && Number.isInteger(raw.newGamePlus) && raw.newGamePlus >= 0 ? raw.newGamePlus : 0,
+    hasLostBattle: raw.hasLostBattle === true,
+    unlockedAchievements: isStringArray(raw.unlockedAchievements) ? raw.unlockedAchievements : [],
+    metBosses: isStringArray(raw.metBosses) ? raw.metBosses : [],
+    ownedArtifacts: isStringArray(raw.ownedArtifacts) ? raw.ownedArtifacts : [],
+    equippedArtifactId: typeof raw.equippedArtifactId === 'string' ? raw.equippedArtifactId : null,
+    flags: isStringArray(raw.flags) ? raw.flags : [],
+    reputation: typeof raw.reputation === 'number' && Number.isInteger(raw.reputation) ? raw.reputation : 0,
+    savedAt: typeof raw.savedAt === 'number' && Number.isFinite(raw.savedAt) ? raw.savedAt : 0,
   };
 };

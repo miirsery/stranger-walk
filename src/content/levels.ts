@@ -27,7 +27,7 @@ export const levels: Record<string, LevelDef> = {
       '#....##..........F...F.....#',
       '#....##....,.....FF.FF.....#',
       '#..........................#',
-      '############################',
+      '##############D#############',
     ],
     spawn: { x: 3, y: 9 },
     npcs: [
@@ -35,6 +35,9 @@ export const levels: Record<string, LevelDef> = {
       { npcId: 'farmer', at: { x: 19, y: 13 } },
       { npcId: 'trader', at: { x: 23, y: 11 } },
       { npcId: 'beekeeper', at: { x: 24, y: 4 } },
+      { npcId: 'wandering_bard', at: { x: 15, y: 16 } },
+      { npcId: 'trapped_fox', at: { x: 10, y: 11 } },
+      { npcId: 'beggar', at: { x: 6, y: 13 } },
     ],
     portals: [
       {
@@ -45,6 +48,7 @@ export const levels: Record<string, LevelDef> = {
         lockedText: 'Люк заперт. Старейшина говорил, что сначала нужно помочь на лугах.',
       },
       { at: { x: 0, y: 4 }, toLevel: 'forest', toSpawn: { x: 12, y: 4 } },
+      { at: { x: 14, y: 17 }, toLevel: 'caves', toSpawn: { x: 14, y: 9 } },
     ],
     objects: [
       {
@@ -54,14 +58,15 @@ export const levels: Record<string, LevelDef> = {
         lines: ['Тихие луга.', 'Старейшина — у тропы на севере. Загон фермера — на юго-востоке. Люк на подлодку — на востоке.'],
       },
       { id: 'pond_chest', type: 'chest', at: { x: 25, y: 2 }, choices: ['viper', 'reaper', 'feast'] },
-      { id: 'garden_lever', type: 'lever', at: { x: 9, y: 6 }, opens: ['garden_door'] },
-      { id: 'garden_door', type: 'door', at: { x: 20, y: 3 } },
       {
         id: 'garden_sign',
         type: 'sign',
-        at: { x: 20, y: 2 },
-        lines: ['Тайник в стене.', 'Если ты здесь — значит, нашёл рычаг у тропы на западе.'],
+        at: { x: 9, y: 5 },
+        lines: ['Увядшая клумба.', 'Говорят, где-то здесь садовник спрятал клад, да и сам не вернулся за ним.'],
       },
+      { id: 'garden_lever', type: 'lever', at: { x: 9, y: 6 }, opens: ['garden_door'] },
+      { id: 'garden_door', type: 'door', at: { x: 20, y: 3 } },
+      { id: 'garden_chest', type: 'chest', at: { x: 20, y: 2 }, choices: ['bull', 'viper', 'hive'], guaranteed: ['shard_of_dawn'] },
     ],
   },
   submarine: {
@@ -83,6 +88,7 @@ export const levels: Record<string, LevelDef> = {
     npcs: [
       { npcId: 'captain', at: { x: 3, y: 6 } },
       { npcId: 'engineer', at: { x: 25, y: 2 }, patrol: [{ x: 21, y: 2 }] },
+      { npcId: 'fisher_mate', at: { x: 23, y: 6 } },
     ],
     portals: [
       { at: { x: 0, y: 2 }, toLevel: 'meadow', toSpawn: { x: 26, y: 8 } },
@@ -111,7 +117,7 @@ export const levels: Record<string, LevelDef> = {
       },
       { id: 'hull_lever', type: 'lever', at: { x: 9, y: 7 }, opens: ['hull_door'] },
       { id: 'hull_door', type: 'door', at: { x: 13, y: 6 } },
-      { id: 'hull_chest', type: 'chest', at: { x: 14, y: 6 }, choices: ['kraken', 'depth_charge', 'mine'] },
+      { id: 'hull_chest', type: 'chest', at: { x: 14, y: 6 }, choices: ['kraken', 'depth_charge', 'mine'], guaranteed: ['shard_of_depth'] },
     ],
   },
   castle: {
@@ -127,7 +133,7 @@ export const levels: Record<string, LevelDef> = {
       '#####....===....#####',
       '#........===........#',
       '#..T.....===.....T..#',
-      '#........===........#',
+      'D........===........#',
       '#........===........#',
       '#..T.....===.....T..#',
       '#........===........#',
@@ -145,6 +151,7 @@ export const levels: Record<string, LevelDef> = {
         requires: [{ type: 'bossDefeated', bossId: 'keeper', value: true }],
         lockedText: 'Звёздные врата запечатаны силой Хранителя.',
       },
+      { at: { x: 0, y: 8 }, toLevel: 'casemate', toSpawn: { x: 6, y: 6 } },
     ],
     objects: [
       {
@@ -162,7 +169,7 @@ export const levels: Record<string, LevelDef> = {
       },
       { id: 'crypt_lever', type: 'lever', at: { x: 18, y: 11 }, opens: ['crypt_door'] },
       { id: 'crypt_door', type: 'door', at: { x: 19, y: 8 } },
-      { id: 'crypt_chest', type: 'chest', at: { x: 19, y: 9 }, choices: ['squire', 'blessing', 'knight'] },
+      { id: 'crypt_chest', type: 'chest', at: { x: 19, y: 9 }, choices: ['squire', 'blessing', 'knight'], guaranteed: ['shard_of_dusk'] },
     ],
   },
   station: {
@@ -179,12 +186,15 @@ export const levels: Record<string, LevelDef> = {
       '*#..##........##....#*',
       '*#..##........##....#*',
       '*#..................#*',
-      '*####################*',
+      '*#########D##########*',
       '**********************',
     ],
     spawn: { x: 2, y: 4 },
     npcs: [{ npcId: 'void_captain', at: { x: 18, y: 5 } }],
-    portals: [{ at: { x: 0, y: 4 }, toLevel: 'castle', toSpawn: { x: 18, y: 2 } }],
+    portals: [
+      { at: { x: 0, y: 4 }, toLevel: 'castle', toSpawn: { x: 18, y: 2 } },
+      { at: { x: 10, y: 9 }, toLevel: 'pod_bay', toSpawn: { x: 6, y: 1 } },
+    ],
     objects: [
       { id: 'orbit_chest', type: 'chest', at: { x: 10, y: 8 }, choices: ['laser', 'barrier', 'star_map'] },
       {
@@ -195,7 +205,7 @@ export const levels: Record<string, LevelDef> = {
       },
       { id: 'vault_lever', type: 'lever', at: { x: 7, y: 3 }, opens: ['vault_door'] },
       { id: 'vault_door', type: 'door', at: { x: 10, y: 2 } },
-      { id: 'vault_chest', type: 'chest', at: { x: 10, y: 3 }, choices: ['titan', 'barrier', 'turret'] },
+      { id: 'vault_chest', type: 'chest', at: { x: 10, y: 3 }, choices: ['titan', 'barrier', 'turret'], guaranteed: ['shard_of_void'] },
     ],
   },
   ballast: {
@@ -224,6 +234,60 @@ export const levels: Record<string, LevelDef> = {
       },
     ],
   },
+  pod_bay: {
+    id: 'pod_bay',
+    name: 'Отсек спасательных капсул',
+    setting: 'space',
+    rows: [
+      '######D#####',
+      '#..........#',
+      '#..........#',
+      '#..........#',
+      '#..........#',
+      '#..........#',
+      '############',
+    ],
+    spawn: { x: 6, y: 1 },
+    npcs: [{ npcId: 'stranded_pilot', at: { x: 3, y: 3 } }],
+    portals: [{ at: { x: 6, y: 0 }, toLevel: 'station', toSpawn: { x: 10, y: 8 } }],
+    objects: [
+      {
+        id: 'pod_bay_sign',
+        type: 'sign',
+        at: { x: 9, y: 3 },
+        lines: ['Отсек спасательных капсул.', 'Одна капсула так и не стартовала — кто-то решил остаться.'],
+      },
+    ],
+  },
+  casemate: {
+    id: 'casemate',
+    name: 'Нижний каземат',
+    setting: 'castle',
+    rows: [
+      '##############',
+      '#T..........T#',
+      '#............#',
+      '#....==......#',
+      '#....==......#',
+      '#....==......#',
+      '#............#',
+      '######D#######',
+    ],
+    spawn: { x: 6, y: 6 },
+    npcs: [
+      { npcId: 'jester_ghost', at: { x: 9, y: 3 } },
+      { npcId: 'casemate_warden', at: { x: 11, y: 5 } },
+    ],
+    portals: [{ at: { x: 6, y: 7 }, toLevel: 'castle', toSpawn: { x: 1, y: 8 } }],
+    objects: [
+      {
+        id: 'casemate_sign',
+        type: 'sign',
+        at: { x: 2, y: 2 },
+        lines: ['Нижний каземат.', 'Дверь сюда не запирали годами — похоже, прежний Хранитель просто забыл о ней.'],
+      },
+    ],
+  },
   forest: {
     id: 'forest',
     name: 'Старый лес',
@@ -240,7 +304,10 @@ export const levels: Record<string, LevelDef> = {
       '##############',
     ],
     spawn: { x: 12, y: 4 },
-    npcs: [{ npcId: 'hermit', at: { x: 7, y: 2 } }],
+    npcs: [
+      { npcId: 'hermit', at: { x: 7, y: 2 } },
+      { npcId: 'puzzle_keeper', at: { x: 2, y: 2 } },
+    ],
     portals: [{ at: { x: 13, y: 4 }, toLevel: 'meadow', toSpawn: { x: 1, y: 4 } }],
     objects: [
       {
@@ -249,6 +316,39 @@ export const levels: Record<string, LevelDef> = {
         at: { x: 11, y: 5 },
         lines: ['Старый лес.', 'Тропа петляет между деревьями — похоже, кто-то здесь всё же живёт.'],
       },
+    ],
+  },
+  caves: {
+    id: 'caves',
+    name: 'Пещеры',
+    setting: 'caves',
+    rows: [
+      '##################',
+      '#................#',
+      '#..*..........*..#',
+      '#................#',
+      '#................#',
+      '#................#',
+      '#................#',
+      '#..*..........*..#',
+      '#................#',
+      '#................#',
+      '##############D###',
+    ],
+    spawn: { x: 14, y: 9 },
+    npcs: [
+      { npcId: 'prospector', at: { x: 4, y: 4 } },
+      { npcId: 'crystal_golem', at: { x: 14, y: 4 } },
+    ],
+    portals: [{ at: { x: 14, y: 10 }, toLevel: 'meadow', toSpawn: { x: 14, y: 16 } }],
+    objects: [
+      {
+        id: 'caves_sign',
+        type: 'sign',
+        at: { x: 2, y: 8 },
+        lines: ['Пещеры под лугами.', 'Кристаллы здесь звенят сами по себе — и, кажется, что-то в глубине отвечает на звон.'],
+      },
+      { id: 'crystal_chest', type: 'chest', at: { x: 3, y: 3 }, choices: ['cave_lurker', 'golem_shard', 'echo'], guaranteed: ['shard_of_stone'] },
     ],
   },
 };

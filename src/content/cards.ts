@@ -40,6 +40,7 @@ const list: CardDef[] = [
   spell('feast', 'Пир урожая', 'fields', 2, 'common', 'Лечит героя на 4.', { type: 'healHero', amount: 4 }),
   unit('viper', 'Гадюка', 'fields', 2, 1, 2, 'rare', 'Яд: убивает любое существо, которое ранит.', ['poison']),
   unit('hive', 'Дикий рой', 'fields', 1, 2, 1, 'common', 'Рывок: жалит сразу, но долго не живёт.', ['charge']),
+  unit('shard_of_dawn', 'Осколок рассвета', 'fields', 3, 3, 4, 'legendary', 'Хранит тепло первого рассвета. При выходе: лечит героя на 2.', [], { type: 'healHero', amount: 2 }),
   // Подводная лодка
   unit('crab', 'Краб-механик', 'submarine', 2, 2, 3, 'common', 'При выходе: лечит героя на 2.', [], { type: 'healHero', amount: 2 }),
   unit('torpedo', 'Торпеда', 'submarine', 3, 4, 1, 'rare', 'Рывок: атакует сразу.', ['charge']),
@@ -49,6 +50,7 @@ const list: CardDef[] = [
   spell('harpoon', 'Гарпун', 'submarine', 2, 'common', '3 урона выбранной цели.', { type: 'damageTarget', amount: 3 }),
   spell('depth_charge', 'Глубинная бомба', 'submarine', 3, 'rare', '2 урона всем существам врага.', { type: 'damageAllEnemies', amount: 2 }),
   unit('jellyfish', 'Медуза', 'submarine', 3, 2, 2, 'rare', 'Яд: убивает любое существо, которое ранит.', ['poison']),
+  unit('shard_of_depth', 'Осколок глубины', 'submarine', 3, 2, 6, 'legendary', 'Беззвучно опускается на дно и ждёт.', ['guard']),
   // Замок
   unit('squire', 'Оруженосец', 'castle', 1, 2, 1, 'common', 'Рвётся в бой раньше рыцаря.'),
   unit('archer', 'Лучница', 'castle', 2, 3, 2, 'common', 'При выходе: 1 урона герою врага.', [], { type: 'damageEnemyHero', amount: 1 }),
@@ -60,6 +62,8 @@ const list: CardDef[] = [
   spell('banner', 'Королевское знамя', 'castle', 3, 'rare', 'Твои существа получают +1/+1.', { type: 'buffAllies', attack: 1, health: 1 }),
   unit('standard_bearer', 'Знаменосец', 'castle', 3, 1, 3, 'epic', 'Аура: остальные твои существа получают +1 к атаке.', [], undefined, undefined, { attack: 1 }),
   unit('paladin', 'Паладин', 'castle', 3, 3, 3, 'rare', 'Щит: гасит первый полученный удар.', ['shield']),
+  unit('warden', 'Страж каземата', 'castle', 5, 3, 6, 'legendary', 'Защитник. Яд: убивает любое существо, которое ранит.', ['guard', 'poison']),
+  unit('shard_of_dusk', 'Осколок сумрака', 'castle', 3, 4, 3, 'legendary', 'При гибели: 2 урона герою врага.', [], undefined, { type: 'damageEnemyHero', amount: 2 }),
   // Космос
   unit('drone', 'Дрон', 'space', 1, 1, 1, 'common', 'Рывок: атакует сразу.', ['charge']),
   unit('astronaut', 'Астронавт', 'space', 2, 2, 3, 'common', 'Первым выходит в открытый космос.'),
@@ -71,6 +75,16 @@ const list: CardDef[] = [
   spell('laser', 'Лазерный луч', 'space', 3, 'rare', '4 урона выбранной цели.', { type: 'damageTarget', amount: 4 }),
   spell('star_map', 'Звёздная карта', 'space', 2, 'common', 'Возьми 2 карты.', { type: 'draw', count: 2 }),
   spell('meteor', 'Метеор', 'space', 4, 'epic', '5 урона герою врага.', { type: 'damageEnemyHero', amount: 5 }),
+  spell('shard_of_void', 'Осколок пустоты', 'space', 3, 'legendary', '2 урона всем существам врага.', { type: 'damageAllEnemies', amount: 2 }),
+  // Пещеры
+  unit('crystal_bat', 'Кристальная летучая мышь', 'caves', 1, 2, 1, 'common', 'Рывок: атакует сразу.', ['charge']),
+  unit('cave_lurker', 'Пещерный хищник', 'caves', 2, 2, 3, 'common', 'Таится в темноте, пока не разглядишь.'),
+  unit('golem_shard', 'Осколок голема', 'caves', 3, 2, 5, 'rare', 'Защитник из обломков голема.', ['guard']),
+  spell('stalactite_trap', 'Ловушка со сталактитами', 'caves', 2, 'rare', '4 урона выбранной цели.', { type: 'damageTarget', amount: 4 }),
+  spell('cave_in', 'Обвал', 'caves', 3, 'rare', '3 урона всем существам врага.', { type: 'damageAllEnemies', amount: 3 }),
+  spell('echo', 'Эхо', 'caves', 2, 'common', 'Возьми 2 карты.', { type: 'draw', count: 2 }),
+  unit('golem_heart', 'Сердце голема', 'caves', 4, 2, 10, 'legendary', 'Бьётся медленно, но держит удар за двоих.', ['guard']),
+  unit('shard_of_stone', 'Осколок камня', 'caves', 3, 2, 7, 'legendary', 'Защитник. Твёрже самого камня.', ['guard']),
 ];
 
 export const cards: Record<string, CardDef> = Object.fromEntries(list.map((card) => [card.id, card]));

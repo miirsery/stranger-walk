@@ -25,7 +25,7 @@ type ArtSource = HTMLImageElement | HTMLCanvasElement;
 const isArtSource = (value: unknown): value is ArtSource =>
   value instanceof HTMLImageElement || value instanceof HTMLCanvasElement;
 
-/** Уже загруженное (через `preloadArt`) изображение по ключу — или `null`, если его нет/не загрузилось. */
+/** Уже загруженное (через `queueArt`) изображение по ключу — или `null`, если его нет/не загрузилось. */
 const getArtSource = (scene: Phaser.Scene, key: string): ArtSource | null => {
   if (!scene.textures.exists(key)) return null;
   const source = scene.textures.get(key).getSourceImage();
@@ -37,7 +37,7 @@ const drawArt = (ctx: CanvasRenderingContext2D, source: ArtSource, ox: number, s
 };
 
 /** Персонажи, для которых нарисован арт (`public/assets/characters/<id>.webp`). */
-const CHARACTER_ART_IDS = [
+export const CHARACTER_ART_IDS = [
   'player', 'elder', 'farmer', 'beekeeper', 'captain', 'engineer', 'trader', 'keeper', 'void_captain',
 ] as const;
 
@@ -51,6 +51,8 @@ const TILE_ART_CHARS: Record<string, string[]> = {
   castle: ['.', '=', '#', 'T', 'D'],
   space: ['.', '#', '*', 'D'],
 };
+/** Сеттинги, для которых есть готовый арт тайлов — остальные (пещеры) всегда рисуются процедурно. */
+export const ART_SETTING_IDS = Object.keys(TILE_ART_CHARS);
 /** Некоторые символы тайлов — не годные имена файлов, храним их арт под читаемым слагом. */
 const TILE_SLUGS: Record<string, string> = { '.': 'dot', ',': 'comma', '=': 'eq', '#': 'hash', '~': 'tilde', '*': 'star' };
 const tileSlug = (char: string): string => TILE_SLUGS[char] ?? char;
@@ -58,14 +60,26 @@ const tileArtKey = (settingId: string, char: string): string => `art-tile-${sett
 const hasTileArt = (settingId: string, char: string): boolean => (TILE_ART_CHARS[settingId] ?? []).includes(char);
 
 /**
- * Ставит в очередь загрузки весь имеющийся арт персонажей и тайлов. Вызывать один раз
- * из `preload()` сцены — к моменту `create()` `getArtSource` уже найдёт готовые текстуры.
+ * Ставит в очередь загрузки арт персонажей и тайлов только перечисленных сеттингов
+ * (плюс сами персонажи, кем бы они ни были) — код-сплиттинг по сеттингам: не грузим чужие
+ * миры, пока игрок не собирается туда. Уже загруженное (по ключу текстуры) пропускается.
+ * Вызывать либо из `preload()` (блокирует до загрузки), либо позже и вручную запустить
+ * `scene.load.start()` — тогда загрузка идёт в фоне, не блокируя уже отрисованную сцену.
  */
-export const preloadArt = (scene: Phaser.Scene): void => {
+export const queueArt = (scene: Phaser.Scene, settingIds: readonly string[], characterIds: readonly string[]): void => {
   const base: string = import.meta.env.BASE_URL;
-  for (const id of CHARACTER_ART_IDS) scene.load.image(characterArtKey(id), `${base}assets/characters/${id}.webp`);
-  for (const [settingId, chars] of Object.entries(TILE_ART_CHARS)) {
-    for (const char of chars) scene.load.image(tileArtKey(settingId, char), `${base}assets/tiles/${settingId}_${tileSlug(char)}.webp`);
+  for (const id of new Set(characterIds)) {
+    if (!hasCharacterArt(id)) continue;
+    const key = characterArtKey(id);
+    if (scene.textures.exists(key)) continue;
+    scene.load.image(key, `${base}assets/characters/${id}.webp`);
+  }
+  for (const settingId of settingIds) {
+    for (const char of TILE_ART_CHARS[settingId] ?? []) {
+      const key = tileArtKey(settingId, char);
+      if (scene.textures.exists(key)) continue;
+      scene.load.image(key, `${base}assets/tiles/${settingId}_${tileSlug(char)}.webp`);
+    }
   }
 };
 

@@ -2,10 +2,10 @@
 import { storeToRefs } from 'pinia';
 import { audio } from '@/audio/chiptune';
 import PageLayout from '../components/PageLayout.vue';
-import type { TouchControlsMode, UiScale } from '../stores/settings';
-import { UI_SCALES, useSettingsStore } from '../stores/settings';
+import type { TextSpeed, TouchControlsMode, UiScale } from '../stores/settings';
+import { TEXT_SPEEDS, UI_SCALES, useSettingsStore } from '../stores/settings';
 
-const { musicVolume, sfxVolume, touchControls, uiScale } = storeToRefs(useSettingsStore());
+const { musicVolume, sfxVolume, touchControls, uiScale, textSpeed, highContrast } = storeToRefs(useSettingsStore());
 
 const scaleLabel = (scale: UiScale): string => (scale === 'auto' ? 'Авто' : `×${scale}`);
 
@@ -14,6 +14,8 @@ const touchOptions: { value: TouchControlsMode; label: string }[] = [
   { value: 'on', label: 'Всегда' },
   { value: 'off', label: 'Скрыть' },
 ];
+
+const textSpeedLabels: Record<TextSpeed, string> = { slow: 'Медленно', normal: 'Обычно', fast: 'Быстро', instant: 'Мгновенно' };
 
 const percent = (value: number): string => `${Math.round(value * 100)}%`;
 </script>
@@ -77,6 +79,54 @@ const percent = (value: number): string => `${Math.round(value * 100)}%`;
         </div>
       </fieldset>
       <p class="settings__note">«Авто» показывает кнопки только на устройствах с сенсорным экраном.</p>
+    </section>
+    <section class="pixel-panel settings">
+      <fieldset class="settings__group">
+        <legend>Скорость текста</legend>
+        <div class="settings__options">
+          <button
+            v-for="speed in TEXT_SPEEDS"
+            :key="speed"
+            type="button"
+            class="pixel-button"
+            :class="{ 'pixel-button--ghost': textSpeed !== speed }"
+            :aria-pressed="textSpeed === speed"
+            @click="textSpeed = speed"
+          >
+            {{ textSpeedLabels[speed] }}
+          </button>
+        </div>
+      </fieldset>
+      <p class="settings__note">Нажатие по реплике всегда показывает её целиком, не дожидаясь анимации.</p>
+    </section>
+    <section class="pixel-panel settings">
+      <fieldset class="settings__group">
+        <legend>Контраст</legend>
+        <div class="settings__options">
+          <button
+            type="button"
+            class="pixel-button"
+            :class="{ 'pixel-button--ghost': highContrast }"
+            :aria-pressed="!highContrast"
+            @click="highContrast = false"
+          >
+            Обычный
+          </button>
+          <button
+            type="button"
+            class="pixel-button"
+            :class="{ 'pixel-button--ghost': !highContrast }"
+            :aria-pressed="highContrast"
+            @click="highContrast = true"
+          >
+            Высокий
+          </button>
+        </div>
+      </fieldset>
+      <p class="settings__note">
+        Более яркие и чётко различимые цвета — удобнее при дальтонизме и в сложных условиях освещения.
+        Карты также помечают редкость и запас хода/здоровья значками, не только цветом.
+      </p>
     </section>
   </PageLayout>
 </template>

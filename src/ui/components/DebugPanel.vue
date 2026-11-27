@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { GameSession, Mode } from '@core/session/gameSession';
 import { computed, ref } from 'vue';
+import { clearCrashLog, crashLog } from '../errorReporting';
 
 const props = defineProps<{ session: GameSession; modeKind: Mode['kind'] }>();
 const emit = defineEmits<{ changed: [] }>();
@@ -8,6 +9,8 @@ const emit = defineEmits<{ changed: [] }>();
 const open = ref(false);
 const portalsOpen = ref(props.session.cheatPortalsOpen);
 const levels = computed(() => Object.values(props.session.content.data.levels));
+const crashCount = ref(crashLog().length);
+const copyStatus = ref('');
 
 /** Выполняет команду и просит игру перечитать состояние сессии. */
 const run = (command: () => void): void => {
@@ -19,6 +22,26 @@ const togglePortals = (): void => {
   portalsOpen.value = !portalsOpen.value;
   props.session.cheatSetPortalsOpen(portalsOpen.value);
 };
+
+const copyCrashLog = async (): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(crashLog(), null, 2));
+    copyStatus.value = 'Скопировано';
+  } catch {
+    copyStatus.value = 'Буфер обмена недоступен';
+  }
+};
+
+const clearLog = (): void => {
+  clearCrashLog();
+  crashCount.value = 0;
+  copyStatus.value = '';
+};
+
+const togglePanel = (): void => {
+  open.value = !open.value;
+  if (open.value) crashCount.value = crashLog().length;
+};
 </script>
 
 <template>
@@ -29,7 +52,7 @@ const togglePortals = (): void => {
       :aria-expanded="open"
       aria-controls="debug-panel"
       title="Режим отладки"
-      @click="open = !open"
+      @click="togglePanel"
     >
       DBG
     </button>
@@ -71,6 +94,14 @@ const togglePortals = (): void => {
       >
         {{ level.name }}
       </button>
+      <p class="debug__title">Ошибки ({{ crashCount }})</p>
+      <button type="button" class="pixel-button pixel-button--ghost debug__button" :disabled="crashCount === 0" @click="copyCrashLog">
+        Скопировать журнал
+      </button>
+      <button type="button" class="pixel-button pixel-button--ghost debug__button" :disabled="crashCount === 0" @click="clearLog">
+        Очистить журнал
+      </button>
+      <p v-if="copyStatus" class="debug__status">{{ copyStatus }}</p>
     </div>
   </div>
 </template>
@@ -118,5 +149,10 @@ const togglePortals = (): void => {
   padding: 6px 8px;
   font-size: 8px;
   text-align: left;
+}
+
+.debug__status {
+  font-size: 8px;
+  color: var(--green);
 }
 </style>

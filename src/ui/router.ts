@@ -6,6 +6,8 @@ export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', name: 'menu', component: MainMenuView },
+    { path: '/new-game', name: 'new-game', component: () => import('./views/ChooseDeckView.vue') },
+    { path: '/slots', name: 'slots', component: () => import('./views/SaveSlotsView.vue') },
     // Игра (и Phaser) подгружается отдельным чанком только при старте.
     { path: '/play', name: 'play', component: () => import('./views/GameView.vue') },
     { path: '/controls', name: 'controls', component: () => import('./views/ControlsView.vue') },

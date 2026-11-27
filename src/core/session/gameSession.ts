@@ -1,12 +1,18 @@
+import type { AchievementView } from '../achievements/achievements';
+import { achievementDefs, evaluateAchievements } from '../achievements/achievements';
 import { performAiStep } from '../battle/ai';
 import type { ActionResult, AttackTarget } from '../battle/cardBattle';
 import { CardBattle } from '../battle/cardBattle';
 import { CardCollection } from '../cards/collection';
 import { ContentRegistry } from '../content/registry';
 import type {
+  ArtifactDef,
+  ArtifactId,
+  ArtifactOffer,
   BossDef,
   CardId,
   Condition,
+  DialogChoice,
   Effect,
   GameContent,
   LevelId,
@@ -32,6 +38,8 @@ export interface DialogState {
   speaker: string;
   lines: string[];
   index: number;
+  /** Варианты ответа — показываются по достижении последней реплики, если они заданы. */
+  choices: string[] | null;
 }
 
 /**
@@ -47,9 +55,9 @@ export type Mode =
   | { kind: 'minigame'; def: MinigameDef; game: AnyMinigame; phase: MinigamePhase; wonBefore: boolean }
   | { kind: 'battle'; boss: BossDef; battle: CardBattle }
   /** Выбор одной карты из нескольких (сундук). */
-  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; after?: () => void }
+  | { kind: 'reward'; title: string; options: CardId[]; chestKey: string | null; after?: () => void; guaranteed?: CardId[] }
   /** Лавка торговца: можно купить любую из карт за монеты, пока не надоест. */
-  | { kind: 'trade'; offers: TradeOffer[] }
+  | { kind: 'trade'; offers: TradeOffer[]; artifactOffers: ArtifactOffer[] }
   /** Финальная сцена после победы над боссом с `finale` — экран вместо обычного возврата в мир. */
   | { kind: 'finale'; title: string; lines: string[] }
   /** Глава из `story.ts`, показанная заставкой при первом входе в её уровень. */
@@ -60,6 +68,21 @@ export interface InteractionPrompt {
   verb: string;
   name: string;
   at: Point;
+}
+
+/** Запись бестиария: лор и статус одного босса. */
+export interface BestiaryEntry {
+  boss: BossDef;
+  /** Игрок хотя бы раз сражался с боссом (победа не обязательна). */
+  met: boolean;
+  defeated: boolean;
+}
+
+/** Статус одного артефакта для UI экипировки. */
+export interface ArtifactView {
+  def: ArtifactDef;
+  owned: boolean;
+  equipped: boolean;
 }
 
 export type SessionEvent =
@@ -78,6 +101,8 @@ export type SessionEvent =
 
 export interface SessionOptions {
   seed?: number;
+  /** Выбранная при старте колода; по умолчанию — `content.player.starterDeck`. */
+  starterDeck?: CardId[];
 }
 
 const SYSTEM_SPEAKER = '';
@@ -85,6 +110,8 @@ const SYSTEM_SPEAKER = '';
 const CHEAT_COPIES = 2;
 /** Монеты за победу в мини-игре — каждый раз, не только за первую. */
 const MINIGAME_WIN_COINS = 10;
+/** На сколько растёт здоровье боссов за каждый пройденный цикл New Game+. */
+const NEW_GAME_PLUS_BOSS_HEALTH_STEP = 0.25;
 /** Ограничение шага, чтобы после «подвисшей» вкладки персонаж не пролетал сквозь стены. */
 const MAX_STEP_MS = 50;
 
@@ -101,6 +128,7 @@ export class GameSession {
 
   private currentMode: Mode = { kind: 'world' };
   private pendingEffects: Effect[] = [];
+  private pendingChoices: DialogChoice[] | null = null;
   private pendingTalk: string | null = null;
   private pendingFinale: { title: string; lines: string[] } | null = null;
   private readonly defeatedBosses = new Set<string>();
@@ -116,13 +144,29 @@ export class GameSession {
   private pendingMinigameChoices: CardId[] | null = null;
   private readonly rng: Rng;
   private coinCount = 0;
+  /** Сколько раз игрок уже начинал New Game+ — усиливает боссов нового цикла. */
+  private newGamePlusCount = 0;
+  /** Проигрывал ли игрок хоть раз бой (сдача тоже считается). */
+  private hasLostBattle = false;
+  /** Засчитанные достижения — не пересчитываются при New Game+, остаются навсегда. */
+  private readonly unlockedAchievements = new Set<string>();
+  /** Боссы, с которыми игрок хоть раз сражался — для бестиария; не сбрасывается New Game+. */
+  private readonly metBosses = new Set<string>();
+  /** Найденные (купленные) артефакты — экипировка вне боя, не карты. */
+  private readonly ownedArtifacts = new Set<string>();
+  /** Экипирован максимум один артефакт за раз; действует на героя весь следующий бой. */
+  private equippedArtifactId: ArtifactId | null = null;
+  /** Свободные флаги истории — обычно следствие выбора в ветвящемся диалоге; сбрасываются New Game+. */
+  private readonly flags = new Set<string>();
+  /** Репутация — растёт и падает от мелких поступков; сбрасывается New Game+. */
+  private reputationScore = 0;
 
   constructor(content: GameContent, options: SessionOptions = {}) {
     this.content = new ContentRegistry(content);
     this.rng = createRng(options.seed ?? 1);
     this.world = new WorldState(this.content, content.player.startLevel);
     this.quests = new QuestLog(this.content.quest);
-    this.cards = new CardCollection(content.deckRules, content.player.starterDeck);
+    this.cards = new CardCollection(content.deckRules, options.starterDeck ?? content.player.starterDeck);
     this.syncDoors();
     this.showLevelScene(content.player.startLevel);
   }
@@ -158,6 +202,19 @@ export class GameSession {
     for (const id of save.seenChapters) session.seenChapters.add(id);
     session.syncDoors();
     session.coinCount = save.coins;
+    session.newGamePlusCount = save.newGamePlus;
+    session.hasLostBattle = save.hasLostBattle;
+    for (const id of save.unlockedAchievements) session.unlockedAchievements.add(id);
+    for (const id of save.metBosses) if (has(content.bosses, id)) session.metBosses.add(id);
+    for (const id of save.ownedArtifacts) if (has(content.artifacts, id)) session.ownedArtifacts.add(id);
+    if (save.equippedArtifactId && session.ownedArtifacts.has(save.equippedArtifactId)) {
+      session.equippedArtifactId = save.equippedArtifactId;
+    }
+    for (const flagId of save.flags) session.flags.add(flagId);
+    session.reputationScore = save.reputation;
+    // Пересчитывает достижения из восстановленного состояния — страхует старые сохранения,
+    // сделанные до появления этого списка.
+    session.syncAchievements();
     // Сохранение всегда возвращает в мир — вступительная сцена из конструктора тут лишняя.
     session.setMode({ kind: 'world' });
     return session;
@@ -184,6 +241,15 @@ export class GameSession {
       openedDoors: [...this.openedDoors],
       coins: this.coinCount,
       seenChapters: [...this.seenChapters],
+      newGamePlus: this.newGamePlusCount,
+      hasLostBattle: this.hasLostBattle,
+      unlockedAchievements: [...this.unlockedAchievements],
+      metBosses: [...this.metBosses],
+      ownedArtifacts: [...this.ownedArtifacts],
+      equippedArtifactId: this.equippedArtifactId,
+      flags: [...this.flags],
+      reputation: this.reputationScore,
+      savedAt: Date.now(),
     };
   }
 
@@ -193,6 +259,57 @@ export class GameSession {
 
   get coins(): number {
     return this.coinCount;
+  }
+
+  /** Репутация у NPC: растёт и падает от мелких поступков, меняет их реакцию и цены. */
+  get reputation(): number {
+    return this.reputationScore;
+  }
+
+  /** Сколько раз игрок уже проходил игру (0 — обычное первое прохождение). */
+  get newGamePlus(): number {
+    return this.newGamePlusCount;
+  }
+
+  /** Список достижений с текущим статусом — для журнала. */
+  achievements(): AchievementView[] {
+    return achievementDefs(this.content.data).map((def) => ({ ...def, done: this.unlockedAchievements.has(def.id) }));
+  }
+
+  /** Бестиарий: все боссы игры, не встреченные — закрыты. Встреча не требует победы. */
+  bestiary(): BestiaryEntry[] {
+    return Object.values(this.content.data.bosses).map((boss) => ({
+      boss,
+      met: this.metBosses.has(boss.id),
+      defeated: this.defeatedBosses.has(boss.id),
+    }));
+  }
+
+  /** Все артефакты игры с их статусом — найден ли и экипирован ли сейчас. */
+  artifacts(): ArtifactView[] {
+    return Object.values(this.content.data.artifacts).map((def) => ({
+      def,
+      owned: this.ownedArtifacts.has(def.id),
+      equipped: this.equippedArtifactId === def.id,
+    }));
+  }
+
+  /** Экипировать найденный артефакт (или null, чтобы снять) — слот один на всех. */
+  equipArtifact(artifactId: ArtifactId | null): ActionResult {
+    if (artifactId !== null && !this.ownedArtifacts.has(artifactId)) return { ok: false, reason: 'Артефакт ещё не найден' };
+    this.equippedArtifactId = artifactId;
+    return { ok: true };
+  }
+
+  /** Пересчитывает достижения по текущему состоянию; засчитанные остаются засчитанными навсегда. */
+  private syncAchievements(): void {
+    const state = {
+      defeatedBosses: this.defeatedBosses,
+      wonMinigames: this.wonMinigames,
+      ownedCardIds: new Set(this.cards.list().map(({ cardId }) => cardId)),
+      hasLostBattle: this.hasLostBattle,
+    };
+    for (const id of evaluateAchievements(this.content.data, state)) this.unlockedAchievements.add(id);
   }
 
   /** Шаг игрового цикла. Вызывается рендером каждый кадр. */
@@ -214,6 +331,7 @@ export class GameSession {
     if (mode.kind === 'minigame') {
       if (mode.phase === 'intro') this.startMinigame();
       else if (mode.phase === 'finished') this.quitMinigame();
+      else if (mode.phase === 'playing' && mode.game.type === 'rhythm') mode.game.hit();
       return;
     }
     if (mode.kind === 'dialog') {
@@ -231,7 +349,7 @@ export class GameSession {
     const script = npc.scripts.find((candidate) => this.check(candidate.when));
     if (!script) return;
     this.pendingTalk = npc.id;
-    this.openDialog(npc.name, script.lines, script.effects ?? []);
+    this.openDialog(npc.name, script.lines, script.effects ?? [], script.choices ?? null);
   }
 
   check(conditions: Condition[] | undefined): boolean {
@@ -241,6 +359,13 @@ export class GameSession {
           return this.quests.status(condition.questId) === condition.status;
         case 'bossDefeated':
           return this.defeatedBosses.has(condition.bossId) === condition.value;
+        case 'flag':
+          return this.flags.has(condition.flagId) === condition.value;
+        case 'reputation':
+          return (
+            (condition.atLeast === undefined || this.reputationScore >= condition.atLeast) &&
+            (condition.atMost === undefined || this.reputationScore <= condition.atMost)
+          );
       }
     });
   }
@@ -290,7 +415,7 @@ export class GameSession {
     if (cardId === undefined) return;
     if (mode.chestKey) this.openedChests.add(mode.chestKey);
     this.setMode({ kind: 'world' });
-    this.grantCards([cardId]);
+    this.grantCards(mode.guaranteed?.length ? [cardId, ...mode.guaranteed] : [cardId]);
     mode.after?.();
   }
 
@@ -404,6 +529,11 @@ export class GameSession {
     return this.battleAction((battle) => battle.usePower('player', target));
   }
 
+  /** Взрыв накопленной ярости — доступен независимо от маны, как только шкала заполнена. */
+  battleUseRage(): ActionResult {
+    return this.battleAction((battle) => battle.useRage('player'));
+  }
+
   /** Завершает ход игрока. Дальше ход противника по шагам ведёт `battleEnemyStep`. */
   battleEndTurn(): ActionResult {
     return this.battleAction((battle) => battle.endTurn('player'));
@@ -429,7 +559,8 @@ export class GameSession {
     if (mode.kind !== 'battle') return;
     const { boss, battle } = mode;
     const won = battle.winner === 'player';
-    if (won && boss.finale) this.pendingFinale = boss.finale;
+    if (!won) this.hasLostBattle = true;
+    if (won && boss.finale) this.pendingFinale = this.withSecretEnding(boss.finale);
     if (won && !this.defeatedBosses.has(boss.id)) {
       this.defeatedBosses.add(boss.id);
       this.grantCards(boss.rewardCards);
@@ -447,9 +578,22 @@ export class GameSession {
       }
     }
     this.openDialog(boss.name, won ? boss.winLines : boss.loseLines, []);
+    this.syncAchievements();
   }
 
   // ---------- Внутреннее ----------
+
+  /**
+   * Если собраны все карты секретной концовки, добавляет её строки к обычному эпилогу
+   * финального босса вместо того, чтобы показывать отдельный экран — так кнопку New Game+
+   * нельзя случайно нажать мимо секретной сцены.
+   */
+  private withSecretEnding(finale: { title: string; lines: string[] }): { title: string; lines: string[] } {
+    const { secretEnding } = this.content.data;
+    const unlocked = secretEnding.requiredCards.every((cardId) => this.cards.count(cardId) > 0);
+    if (!unlocked) return finale;
+    return { title: secretEnding.title, lines: [...finale.lines, ...secretEnding.lines] };
+  }
 
   private chestKey(objectId: string): string {
     return `${this.world.level.id}:${objectId}`;
@@ -475,7 +619,13 @@ export class GameSession {
         return;
       case 'chest':
         if (this.isChestOpened(object.id)) return;
-        this.setMode({ kind: 'reward', title: 'Сундук', options: object.choices, chestKey: this.chestKey(object.id) });
+        this.setMode({
+          kind: 'reward',
+          title: 'Сундук',
+          options: object.choices,
+          chestKey: this.chestKey(object.id),
+          guaranteed: object.guaranteed,
+        });
         return;
       case 'lever':
         if (this.isLeverPulled(object)) return;
@@ -508,9 +658,10 @@ export class GameSession {
     if (changed) this.events.emit({ type: 'modeChanged', mode: mode.kind });
   }
 
-  private openDialog(speaker: string, lines: string[], effects: Effect[]): void {
+  private openDialog(speaker: string, lines: string[], effects: Effect[], choices: DialogChoice[] | null = null): void {
     this.pendingEffects = effects;
-    this.setMode({ kind: 'dialog', dialog: { speaker, lines, index: 0 } });
+    this.pendingChoices = choices;
+    this.setMode({ kind: 'dialog', dialog: { speaker, lines, index: 0, choices: choices?.map((choice) => choice.text) ?? null } });
     this.events.emit({ type: 'dialogAdvanced' });
   }
 
@@ -520,20 +671,74 @@ export class GameSession {
       this.events.emit({ type: 'dialogAdvanced' });
       return;
     }
+    // На последней реплике с вариантами ответа ждём выбора через chooseDialogOption.
+    if (this.pendingChoices) return;
+    this.finishDialog();
+  }
+
+  /**
+   * Выбор варианта ответа в конце реплик: вместо возврата в мир — свои реплики варианта,
+   * а его эффекты добавляются к общим и применяются вместе, когда они тоже закончатся.
+   */
+  chooseDialogOption(index: number): void {
+    const mode = this.currentMode;
+    if (mode.kind !== 'dialog' || !this.pendingChoices) return;
+    if (mode.dialog.index !== mode.dialog.lines.length - 1) return;
+    const choice = this.pendingChoices[index];
+    if (!choice) return;
+    this.pendingEffects = [...this.pendingEffects, ...(choice.effects ?? [])];
+    this.pendingChoices = null;
+    mode.dialog.lines = choice.lines;
+    mode.dialog.index = 0;
+    mode.dialog.choices = null;
+    this.events.emit({ type: 'dialogAdvanced' });
+  }
+
+  private finishDialog(): void {
     const effects = this.pendingEffects;
     const talkedTo = this.pendingTalk;
     const finale = this.pendingFinale;
     this.pendingEffects = [];
     this.pendingTalk = null;
     this.pendingFinale = null;
+    this.pendingChoices = null;
     this.setMode(finale ? { kind: 'finale', ...finale } : { kind: 'world' });
-    if (talkedTo) this.progress({ type: 'npcTalked', npcId: talkedTo });
+    // Сперва эффекты реплики (например, запуск квеста), затем прогресс — иначе квест,
+    // запущенный этим же разговором, не успеет активироваться к моменту проверки цели.
     for (const effect of effects) this.apply(effect);
+    if (talkedTo) this.progress({ type: 'npcTalked', npcId: talkedTo });
   }
 
   /** Закрыть финальную сцену и вернуться в мир — игру можно продолжать и после титров. */
   leaveFinale(): void {
     if (this.currentMode.kind === 'finale') this.setMode({ kind: 'world' });
+  }
+
+  /**
+   * Новый цикл поверх текущей коллекции карт: квесты, боссы, мини-игры, сундуки и двери
+   * сбрасываются, но карты и колода остаются — доступ к наградам прежних сундуков не теряется.
+   * Боссы в новом цикле крепче (см. `NEW_GAME_PLUS_BOSS_HEALTH_STEP`).
+   */
+  startNewGamePlus(): void {
+    if (this.currentMode.kind !== 'finale') return;
+    this.newGamePlusCount += 1;
+    this.quests.restore([]);
+    this.defeatedBosses.clear();
+    this.wonMinigames.clear();
+    this.openedChests.clear();
+    this.openedDoors.clear();
+    this.seenChapters.clear();
+    this.flags.clear();
+    this.reputationScore = 0;
+    this.pendingMinigameChoices = null;
+    this.portalsForcedOpen = false;
+    this.lastPortalKey = null;
+    const { startLevel } = this.content.data.player;
+    this.world.loadLevel(startLevel);
+    this.syncDoors();
+    this.setMode({ kind: 'world' });
+    this.events.emit({ type: 'levelChanged', levelId: startLevel });
+    this.showLevelScene(startLevel);
   }
 
   private apply(effect: Effect): void {
@@ -561,11 +766,26 @@ export class GameSession {
       }
       case 'startBattle': {
         const boss = this.content.boss(effect.bossId);
+        this.metBosses.add(boss.id);
         const { player } = this.content.data;
+        const bossHealth = Math.round(boss.health * (1 + NEW_GAME_PLUS_BOSS_HEALTH_STEP * this.newGamePlusCount));
+        const artifact = this.equippedArtifactId ? this.content.data.artifacts[this.equippedArtifactId] : undefined;
+        const heroHealth = player.heroHealth + (artifact?.effect.type === 'heroHealth' ? artifact.effect.amount : 0);
+        const heroPower =
+          player.power && artifact?.effect.type === 'powerCostDelta'
+            ? { ...player.power, cost: Math.max(1, player.power.cost - artifact.effect.amount) }
+            : player.power;
+        const rageGainBonus = artifact?.effect.type === 'rageGainBonus' ? artifact.effect.amount : 0;
         const battle = new CardBattle({
           resolveCard: this.content.card,
-          player: { name: 'Странник', health: player.heroHealth, deck: this.cards.deck, ...(player.power ? { power: player.power } : {}) },
-          enemy: { name: boss.name, health: boss.health, deck: boss.deck, ...(boss.power ? { power: boss.power } : {}) },
+          player: {
+            name: 'Странник',
+            health: heroHealth,
+            deck: this.cards.deck,
+            rageGainBonus,
+            ...(heroPower ? { power: heroPower } : {}),
+          },
+          enemy: { name: boss.name, health: bossHealth, deck: boss.deck, ...(boss.power ? { power: boss.power } : {}) },
           rng: this.rng,
           mulligan: true,
         });
@@ -574,7 +794,13 @@ export class GameSession {
         break;
       }
       case 'openTrade':
-        this.setMode({ kind: 'trade', offers: effect.offers });
+        this.setMode({ kind: 'trade', offers: effect.offers, artifactOffers: effect.artifactOffers ?? [] });
+        break;
+      case 'setFlag':
+        this.flags.add(effect.flagId);
+        break;
+      case 'changeReputation':
+        this.reputationScore += effect.amount;
         break;
     }
   }
@@ -591,6 +817,7 @@ export class GameSession {
       this.grantCards(def.rewardCards);
       if (def.rewardChoices?.length) this.pendingMinigameChoices = [...def.rewardChoices];
       this.progress({ type: 'minigameWon', minigameId: def.id });
+      this.syncAchievements();
     }
   }
 
@@ -606,6 +833,19 @@ export class GameSession {
     return { ok: true };
   }
 
+  /** Купить артефакт у торговца за монеты. */
+  buyArtifact(index: number): ActionResult {
+    const mode = this.currentMode;
+    if (mode.kind !== 'trade') return { ok: false, reason: 'Лавка закрыта' };
+    const offer = mode.artifactOffers[index];
+    if (!offer) return { ok: false, reason: 'Нет такого товара' };
+    if (this.ownedArtifacts.has(offer.artifactId)) return { ok: false, reason: 'Этот артефакт уже найден' };
+    if (offer.price > this.coinCount) return { ok: false, reason: 'Не хватает монет' };
+    this.coinCount -= offer.price;
+    this.ownedArtifacts.add(offer.artifactId);
+    return { ok: true };
+  }
+
   /** Закрыть лавку и вернуться в мир. */
   leaveTrade(): void {
     if (this.currentMode.kind === 'trade') this.setMode({ kind: 'world' });
@@ -615,6 +855,7 @@ export class GameSession {
     if (cardIds.length === 0) return;
     for (const cardId of cardIds) this.cards.add(cardId);
     this.events.emit({ type: 'cardsGranted', cardIds });
+    this.syncAchievements();
   }
 
   private addCoins(amount: number): void {

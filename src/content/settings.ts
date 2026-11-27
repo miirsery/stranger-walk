@@ -67,4 +67,18 @@ export const settings: Record<string, SettingDef> = {
       D: { name: 'Шлюз', solid: false, color: 0x3b4254, accent: 0x6bd6e3, pattern: 'door' },
     },
   },
+  caves: {
+    id: 'caves',
+    name: 'Пещеры',
+    description: 'Кристальные пещеры под Тихими лугами — вход скрыт в земле.',
+    backgroundColor: 0x1a1430,
+    music: 'caves',
+    musicAlt: 'caves2',
+    tiles: {
+      '.': { name: 'Пол пещеры', solid: false, color: 0x3a2f4a, accent: 0x2f2640, pattern: 'speckle' },
+      '#': { name: 'Камень', solid: true, color: 0x241d33, accent: 0x161222, pattern: 'bricks' },
+      '*': { name: 'Кристаллы', solid: true, color: 0x241d33, accent: 0x9b6bd6, pattern: 'stars' },
+      D: { name: 'Трещина', solid: false, color: 0x241d33, accent: 0x9b6bd6, pattern: 'door' },
+    },
+  },
 };

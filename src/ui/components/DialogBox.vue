@@ -1,16 +1,44 @@
 <script setup lang="ts">
 import type { DialogState } from '@core/session/gameSession';
+import { computed } from 'vue';
 
-defineProps<{ dialog: DialogState }>();
-defineEmits<{ next: [] }>();
+const props = defineProps<{ dialog: DialogState; revealedText: string; fullyRevealed: boolean }>();
+const emit = defineEmits<{ next: []; choose: [index: number]; reveal: [] }>();
+
+/** Варианты ответа показываются только на последней реплике сценария и после полного показа текста. */
+const choices = computed(() => {
+  if (props.dialog.index < props.dialog.lines.length - 1 || !props.fullyRevealed) return null;
+  return props.dialog.choices;
+});
+
+/** Пока реплика ещё «печатается» — клик доигрывает её целиком, а не продвигает диалог. */
+const handleAdvance = (): void => {
+  if (props.fullyRevealed) emit('next');
+  else emit('reveal');
+};
 </script>
 
 <template>
-  <button type="button" class="dialog pixel-panel" @click="$emit('next')">
+  <div v-if="choices" class="dialog pixel-panel">
     <span v-if="dialog.speaker" class="dialog__speaker">{{ dialog.speaker }}</span>
-    <span class="dialog__text" aria-live="polite">{{ dialog.lines[dialog.index] }}</span>
+    <span class="dialog__text">{{ revealedText }}</span>
+    <div class="dialog__options">
+      <button
+        v-for="(text, index) in choices"
+        :key="text"
+        type="button"
+        class="pixel-button pixel-button--ghost dialog__option"
+        @click="$emit('choose', index)"
+      >
+        {{ text }}
+      </button>
+    </div>
+  </div>
+  <button v-else type="button" class="dialog pixel-panel" @click="handleAdvance">
+    <span v-if="dialog.speaker" class="dialog__speaker">{{ dialog.speaker }}</span>
+    <span class="dialog__text" aria-live="polite">{{ revealedText }}</span>
     <span class="dialog__next" aria-hidden="true">
-      {{ dialog.index < dialog.lines.length - 1 ? '▼' : '■' }}
+      {{ !fullyRevealed ? '»' : dialog.index < dialog.lines.length - 1 ? '▼' : '■' }}
     </span>
   </button>
 </template>
@@ -40,6 +68,17 @@ defineEmits<{ next: [] }>();
   justify-self: end;
   color: var(--gold);
   animation: blink 0.8s steps(2) infinite;
+}
+
+.dialog__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.dialog__option {
+  font-size: 10px;
 }
 
 @keyframes blink {

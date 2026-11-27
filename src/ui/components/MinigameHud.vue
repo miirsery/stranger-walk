@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { AnyMinigame } from '@core/minigames/minigame';
 import type { MinigamePhase, GameSession } from '@core/session/gameSession';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -8,6 +9,32 @@ interface Stat {
   text: string;
   tone?: 'bad';
 }
+
+/** Статистика по кадру для текущей мини-игры — новый тип добавляет ветку здесь. */
+const statsFor = (game: AnyMinigame): Stat[] => {
+  switch (game.type) {
+    case 'catch':
+      return [
+        { text: `Счёт ${game.score}/${game.def.targetScore}` },
+        { text: `Промахи ${game.misses}/${game.def.maxMisses}`, tone: 'bad' },
+        { text: `Время ${Math.ceil(game.timeLeftMs / 1000)}` },
+      ];
+    case 'fishing':
+      return [{ text: `Поимка ${Math.round(game.progress)}%` }, { text: `Время ${Math.ceil(game.timeLeftMs / 1000)}` }];
+    case 'rhythm':
+      return [
+        { text: `Ноты ${game.hits}/${game.notes.length}` },
+        { text: `Промахи ${game.misses}/${game.def.maxMisses}`, tone: 'bad' },
+      ];
+    case 'memory':
+      return [
+        { text: `Пары ${game.matchedPairs}/${game.totalPairs}` },
+        { text: `Ошибки ${game.mistakes}/${game.def.maxMistakes}`, tone: 'bad' },
+      ];
+    case 'slide':
+      return [{ text: `Ходы ${game.moves}/${game.def.maxMoves}`, tone: game.moves >= game.def.maxMoves * 0.8 ? 'bad' : undefined }];
+  }
+};
 
 const stats = ref<Stat[]>([]);
 let frame = 0;
@@ -33,18 +60,7 @@ const info = computed(() => {
 const tick = (): void => {
   const mode = props.session.mode;
   if (mode.kind === 'minigame') {
-    const game = mode.game;
-    const next: Stat[] =
-      game.type === 'catch'
-        ? [
-            { text: `Счёт ${game.score}/${game.def.targetScore}` },
-            { text: `Промахи ${game.misses}/${game.def.maxMisses}`, tone: 'bad' },
-            { text: `Время ${Math.ceil(game.timeLeftMs / 1000)}` },
-          ]
-        : [
-            { text: `Пары ${game.matchedPairs}/${game.totalPairs}` },
-            { text: `Ошибки ${game.mistakes}/${game.def.maxMistakes}`, tone: 'bad' },
-          ];
+    const next = statsFor(mode.game);
     const nextSignature = next.map((stat) => stat.text).join('|');
     if (nextSignature !== signature) {
       signature = nextSignature;
