@@ -48,6 +48,33 @@ export const quests: Record<string, QuestDef> = {
     ],
     rewardCards: ['jellyfish'],
   },
+  forgotten_jester: {
+    id: 'forgotten_jester',
+    title: 'Забытый шут',
+    description: 'Хранитель вспомнил об узнике в нижнем каземате — найди его.',
+    objectives: [
+      { id: 'talk_jester', text: 'Спустись в нижний каземат и поговори с узником', type: 'talkTo', npcId: 'jester_ghost' },
+    ],
+    rewardCards: ['ghost'],
+  },
+  lost_pilot: {
+    id: 'lost_pilot',
+    title: 'Пропавший пилот',
+    description: 'В отсеке спасательных капсул станции «Горизонт» кто-то прячется до сих пор — проверь.',
+    objectives: [
+      { id: 'talk_pilot', text: 'Найди того, кто прячется в отсеке спасательных капсул', type: 'talkTo', npcId: 'stranded_pilot' },
+    ],
+    rewardCards: ['comet'],
+  },
+  trapped_fox: {
+    id: 'trapped_fox',
+    title: 'Лисица в капкане',
+    description: 'У старого пня на лугах пищит лисица, попавшая в капкан, — реши, как с ней поступить.',
+    objectives: [
+      { id: 'free_or_take', text: 'Подойди к капкану у старого пня', type: 'talkTo', npcId: 'trapped_fox' },
+    ],
+    rewardCards: ['fox'],
+  },
   final_game: {
     id: 'final_game',
     title: 'Последняя партия',

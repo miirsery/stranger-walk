@@ -121,6 +121,16 @@ const powerReady = computed(
   () => myTurn.value && player.value.power !== null && !player.value.powerUsed && player.value.power.cost <= player.value.mana,
 );
 
+// ---------- Ярость ----------
+// Копится от атак, не тратит ману; цели не требует — бьёт героя врага сразу по нажатию.
+const rageReady = computed(() => myTurn.value && player.value.rage >= player.value.maxRage);
+
+const useRage = (): void => {
+  selectedUid.value = null;
+  cancelAiming();
+  report(props.session.battleUseRage());
+};
+
 const usePower = (): void => {
   const mode = props.session.mode;
   if (mode.kind !== 'battle') return;
@@ -404,6 +414,7 @@ watch(
         <span v-if="enemy.power" class="battle__enemy-power" :title="enemy.power.text">
           · Сила: {{ enemy.power.name }} ({{ enemy.power.cost }}) — {{ enemy.power.text }}
         </span>
+        · Ярость: {{ enemy.rage }}/{{ enemy.maxRage }}
       </p>
     </header>
 
@@ -489,6 +500,15 @@ watch(
           <span v-for="index in player.maxMana" :key="index" class="battle__crystal" :class="{ 'battle__crystal--spent': index > player.mana }" />
           <span>{{ player.mana }}/{{ player.maxMana }}</span>
         </p>
+        <p class="battle__rage" :aria-label="`Ярость: ${player.rage} из ${player.maxRage}`">
+          <span
+            v-for="index in player.maxRage"
+            :key="index"
+            class="battle__rage-point"
+            :class="{ 'battle__rage-point--filled': index <= player.rage }"
+          />
+          <span>Ярость {{ player.rage }}/{{ player.maxRage }}</span>
+        </p>
         <p v-if="message" class="battle__message" aria-live="polite">{{ message }}</p>
         <ol class="battle__log" aria-label="Журнал боя" aria-live="polite">
           <li v-for="(line, index) in lastLog" :key="`${state.log.length}-${index}`">{{ line }}</li>
@@ -505,6 +525,16 @@ watch(
           <span class="battle__power-cost">{{ player.power.cost }}</span>
           {{ player.power.name }}
           <span class="battle__power-text">{{ player.powerUsed ? 'использована' : player.power.text }}</span>
+        </button>
+        <button
+          type="button"
+          class="pixel-button battle__rage-burst"
+          :class="{ 'pixel-button--ghost': !rageReady }"
+          :disabled="!rageReady"
+          title="Взрыв ярости: урон герою врага. Не тратит ману, доступен при полной шкале."
+          @click="useRage"
+        >
+          Взрыв ярости
         </button>
         <div class="battle__actions">
           <button type="button" class="pixel-button" :disabled="!myTurn" @click="endTurn">
@@ -669,7 +699,7 @@ watch(
 }
 
 .battle__float--heal {
-  color: #6bdc6b;
+  color: var(--green);
 }
 
 @keyframes float-up {
@@ -940,6 +970,30 @@ watch(
   background: var(--panel-light);
 }
 
+.battle__rage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  color: var(--red);
+}
+
+.battle__rage-point {
+  width: 8px;
+  height: 8px;
+  background: var(--panel-light);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.battle__rage-point--filled {
+  background: var(--red);
+}
+
+.battle__rage-burst {
+  font-size: 8px;
+}
+
 .battle__message {
   color: var(--red);
 }
@@ -1010,7 +1064,7 @@ watch(
   height: 22px;
   font-size: 9px;
   color: var(--text);
-  background: #3d6fd9;
+  background: var(--cost);
   border: 3px solid var(--ink);
 }
 

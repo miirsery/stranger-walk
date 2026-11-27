@@ -36,6 +36,11 @@ export interface SideState {
   board: UnitState[];
   /** Растущий урон за попытку взять карту из пустой колоды — гарантирует, что бой закончится. */
   fatigue: number;
+  /** Копится с каждой атакой существа, не тратит ману; при максимуме доступен взрыв ярости. */
+  rage: number;
+  maxRage: number;
+  /** Доп. ярость за атаку сверх базовой единицы (артефакты). */
+  rageGainBonus: number;
   /** Сила героя (если есть) и использована ли она в этот ход. */
   power: HeroPowerDef | null;
   powerUsed: boolean;
@@ -79,13 +84,21 @@ export interface BattleRules {
   manaCap: number;
   maxBoard: number;
   maxHand: number;
+  /** Сколько атак нужно, чтобы накопить ярость до взрыва. */
+  maxRage: number;
 }
+
+/** Сколько атак нужно по умолчанию, чтобы накопить ярость до взрыва. */
+export const RAGE_MAX = 6;
+/** Урон взрыва ярости по герою врага — не зависит от карт и силы героя. */
+export const RAGE_BURST_DAMAGE = 2;
 
 export const DEFAULT_BATTLE_RULES: BattleRules = {
   startingHand: 3,
   manaCap: 10,
   maxBoard: 5,
   maxHand: 8,
+  maxRage: RAGE_MAX,
 };
 
 export interface BattleParticipant {
@@ -95,6 +108,8 @@ export interface BattleParticipant {
   power?: HeroPowerDef;
   /** Насколько умно играет ИИ за этого участника. По умолчанию — жадный. */
   ai?: AiLevel;
+  /** Доп. ярость за атаку сверх базовой единицы — от экипированного артефакта. */
+  rageGainBonus?: number;
 }
 
 export interface BattleConfig {
@@ -139,6 +154,9 @@ export class CardBattle {
       hand: [],
       board: [],
       fatigue: 0,
+      rage: 0,
+      maxRage: this.rules.maxRage,
+      rageGainBonus: participant.rageGainBonus ?? 0,
       power: participant.power ?? null,
       powerUsed: false,
     });
@@ -279,6 +297,28 @@ export class CardBattle {
     return ok;
   }
 
+  // ---------- Ярость ----------
+
+  canUseRage(side: Side): ActionResult {
+    const guard = this.guardTurn(side);
+    if (!guard.ok) return guard;
+    const own = this.state.sides[side];
+    if (own.rage < own.maxRage) return fail('Ярость ещё не накопилась');
+    return ok;
+  }
+
+  /** Взрыв ярости: не тратит ману, доступен любой стороне при полной шкале. Сбрасывает ярость в 0. */
+  useRage(side: Side): ActionResult {
+    const check = this.canUseRage(side);
+    if (!check.ok) return check;
+    const own = this.state.sides[side];
+    own.rage = 0;
+    this.log(`${own.hero.name}: ярость выплёскивается наружу`);
+    this.applyEffect(side, { type: 'damageEnemyHero', amount: RAGE_BURST_DAMAGE });
+    this.checkWinner();
+    return ok;
+  }
+
   /**
    * Можно ли сыграть карту. Для заклинаний с целью: без `target` проверяется только,
    * что цели вообще есть; с `target` — что выбранная цель допустима.
@@ -359,6 +399,7 @@ export class CardBattle {
     }
 
     attacker.canAttack = false;
+    own.rage = Math.min(own.maxRage, own.rage + 1 + own.rageGainBonus);
     this.state.lastAttack = { seq: (this.state.lastAttack?.seq ?? 0) + 1, side, attackerUid, target };
     if (target.type === 'hero') {
       foe.hero.health -= attacker.attack;

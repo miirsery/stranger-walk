@@ -58,6 +58,20 @@ export const music: Record<string, MusicTrackDef> = {
     bass: 'G2 - - - - - - - D3 - - - - - - - B2 - - - - - - - E3 - - - - - - -',
     drums: 'K - - - H - - - - - - - H - - - K - - - H - - - - - - - H - - -',
   },
+  caves: {
+    id: 'caves',
+    bpm: 88,
+    lead: 'D4 - - F4 - - A4 - - - G4 - - F4 - - D4 - - C4 - - D4 - - - - - - - -',
+    bass: 'D2 - - - - - - - A1 - - - - - - - F2 - - - - - - - C2 - - - - - - -',
+    drums: 'K - - - - - - - - - - - S - - - K - - - - - - - - - - - S - - -',
+  },
+  caves2: {
+    id: 'caves2',
+    bpm: 84,
+    lead: 'A3 - - - D4 - - - F4 - - E4 - - D4 - - - A3 - - - G3 - - - A3 - - - -',
+    bass: 'D2 - - - - - - - - - - - A1 - - - F2 - - - - - - - - - - - C2 - - -',
+    drums: 'K - - - - - - - - - - - - - - - K - - - - - - - - - - - - - - -',
+  },
   battle: {
     id: 'battle',
     bpm: 156,

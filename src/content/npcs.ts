@@ -158,6 +158,17 @@ export const npcs: Record<string, NpcDef> = {
     look: { body: 0x2a3f6b, skin: 0x9fe3d6, hat: 0x6bd6e3 },
     scripts: [
       {
+        when: [
+          { type: 'bossDefeated', bossId: 'void_captain', value: true },
+          { type: 'questStatus', questId: 'lost_pilot', status: 'inactive' },
+        ],
+        lines: [
+          'Курс свободен, Странник. Дальше — только звёзды.',
+          'Постой — в отсеке спасательных капсул, кажется, до сих пор кто-то прячется от меня. Проверь, если не веришь мне на слово.',
+        ],
+        effects: [{ type: 'startQuest', questId: 'lost_pilot' }],
+      },
+      {
         when: [{ type: 'bossDefeated', bossId: 'void_captain', value: true }],
         lines: ['Курс свободен, Странник. Дальше — только звёзды.'],
       },
@@ -170,11 +181,139 @@ export const npcs: Record<string, NpcDef> = {
       },
     ],
   },
+  wandering_bard: {
+    id: 'wandering_bard',
+    name: 'Бродячий музыкант Лют',
+    look: { body: 0x8a5a2b, skin: 0xe0ac7e, hat: 0x7a4fb5 },
+    scripts: [
+      {
+        lines: ['Присядь на пригорок — сыграем вместе. Успевай за ритмом, и будет тебе награда.'],
+        effects: [{ type: 'startMinigame', minigameId: 'meadow_rhythm' }],
+      },
+    ],
+  },
+  trapped_fox: {
+    id: 'trapped_fox',
+    name: 'Лисица в капкане',
+    look: { body: 0xb5572a, skin: 0xe0ac7e, hat: 0x6b3f1f },
+    scripts: [
+      {
+        when: [{ type: 'flag', flagId: 'fox_spared', value: true }],
+        lines: ['Капкан давно пуст — лисица убежала в чащу, едва ты щёлкнул защёлкой.'],
+      },
+      {
+        when: [{ type: 'flag', flagId: 'fox_taken', value: true }],
+        lines: ['От капкана остались одни щепки — шкуру ты забрал ещё тогда.'],
+      },
+      {
+        lines: [
+          'Тонкий писк из капкана у старого пня — лапа лисицы зажата в железе.',
+          'Отпустить её — или забрать шкуру, пока цела?',
+        ],
+        effects: [{ type: 'startQuest', questId: 'trapped_fox' }],
+        choices: [
+          {
+            text: 'Отпустить лисицу',
+            lines: ['Капкан щёлкает, лисица уносится в кусты — но не сразу: у твоих ног остаётся горсть ягод.'],
+            effects: [
+              { type: 'setFlag', flagId: 'fox_spared' },
+              { type: 'grantCards', cardIds: ['feast'] },
+              { type: 'changeReputation', amount: 2 },
+            ],
+          },
+          {
+            text: 'Забрать шкуру',
+            lines: ['Шкура ещё тёплая. Из неё выйдет неплохое чучело для поля.'],
+            effects: [
+              { type: 'setFlag', flagId: 'fox_taken' },
+              { type: 'grantCards', cardIds: ['scarecrow'] },
+              { type: 'changeReputation', amount: -2 },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  beggar: {
+    id: 'beggar',
+    name: 'Бродяга Кузьма',
+    look: { body: 0x5a5248, skin: 0xc98f6b, hat: 0x3a342c },
+    scripts: [
+      { when: [{ type: 'flag', flagId: 'beggar_helped', value: true }], lines: ['Твоя доброта меня до сих пор греет. Храни тебя луга.'] },
+      { when: [{ type: 'flag', flagId: 'beggar_shooed', value: true }], lines: ['Опять ты. Иди своей дорогой.'] },
+      {
+        lines: ['Странник, подай медяк на хлеб — третий день маковой росинки во рту не было.'],
+        choices: [
+          {
+            text: 'Поделиться едой',
+            lines: ['Бродяга кланяется чуть не до земли — не ожидал такой щедрости.'],
+            effects: [{ type: 'setFlag', flagId: 'beggar_helped' }, { type: 'changeReputation', amount: 2 }],
+          },
+          {
+            text: 'Прогнать',
+            lines: ['Бродяга съёживается и уходит, бормоча что-то под нос.'],
+            effects: [{ type: 'setFlag', flagId: 'beggar_shooed' }, { type: 'changeReputation', amount: -2 }],
+          },
+        ],
+      },
+    ],
+  },
+  fisher_mate: {
+    id: 'fisher_mate',
+    name: 'Матрос Тимофей',
+    look: { body: 0x3f7fbf, skin: 0xe0ac7e, hat: 0x555555 },
+    scripts: [
+      {
+        lines: ['В свободную вахту — только с удочкой к иллюминатору. Клёв сегодня неплохой, попробуешь?'],
+        effects: [{ type: 'startMinigame', minigameId: 'submarine_fishing' }],
+      },
+    ],
+  },
   trader: {
     id: 'trader',
     name: 'Торговка Лина',
     look: { body: 0x8a5a2b, skin: 0xe0ac7e, hat: 0xd94e4e },
     scripts: [
+      {
+        // Репутация копится из мелких поступков по всей игре (выбор в диалогах) — здесь
+        // она меняет не реплику ради реплики, а то, что торговка продаёт и почём.
+        when: [{ type: 'reputation', atLeast: 3 }],
+        lines: ['О тебе тут добрые слухи ходят. Для такого — цены свои, особые.', 'Смотри, что есть.'],
+        effects: [
+          {
+            type: 'openTrade',
+            offers: [
+              { cardId: 'bull', price: 16 },
+              { cardId: 'ghost', price: 9 },
+              { cardId: 'knight', price: 20 },
+            ],
+            artifactOffers: [
+              { artifactId: 'amulet_vitality', price: 24 },
+              { artifactId: 'mage_glove', price: 20 },
+              { artifactId: 'fury_belt', price: 24 },
+            ],
+          },
+        ],
+      },
+      {
+        when: [{ type: 'reputation', atMost: -3 }],
+        lines: ['Слухи о тебе так себе — но монета есть монета. Накинула цену, не обижайся.'],
+        effects: [
+          {
+            type: 'openTrade',
+            offers: [
+              { cardId: 'bull', price: 26 },
+              { cardId: 'ghost', price: 16 },
+              { cardId: 'knight', price: 32 },
+            ],
+            artifactOffers: [
+              { artifactId: 'amulet_vitality', price: 38 },
+              { artifactId: 'mage_glove', price: 32 },
+              { artifactId: 'fury_belt', price: 38 },
+            ],
+          },
+        ],
+      },
       {
         lines: ['Монеты из мини-игр без дела не лежат — у меня на них меняют карты.', 'Смотри, что есть.'],
         effects: [
@@ -184,6 +323,11 @@ export const npcs: Record<string, NpcDef> = {
               { cardId: 'bull', price: 20 },
               { cardId: 'ghost', price: 12 },
               { cardId: 'knight', price: 25 },
+            ],
+            artifactOffers: [
+              { artifactId: 'amulet_vitality', price: 30 },
+              { artifactId: 'mage_glove', price: 25 },
+              { artifactId: 'fury_belt', price: 30 },
             ],
           },
         ],
@@ -230,6 +374,92 @@ export const npcs: Record<string, NpcDef> = {
       { lines: ['Тропа заросла — значит, точно не ко мне.'] },
     ],
   },
+  jester_ghost: {
+    id: 'jester_ghost',
+    name: 'Призрак шута Гвидо',
+    look: { body: 0xd8d8f0, skin: 0xb8b0c8, hat: 0xd94e4e },
+    scripts: [
+      {
+        when: [{ type: 'questStatus', questId: 'forgotten_jester', status: 'inactive' }],
+        lines: ['Тут всегда было тихо — даже когда я ещё смеялся.', 'Если Хранитель не посылал тебя — ступай обратно наверх.'],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'forgotten_jester', status: 'active' }],
+        lines: [
+          'Хранитель вспомнил про меня? Надо же.',
+          'Прежний Хранитель запер меня здесь за шутку, которая ему не понравилась. Новый просто забыл открыть дверь.',
+          'Возьми меня с собой — в карточном виде я хотя бы могу отсюда уйти.',
+        ],
+      },
+      { lines: ['Здесь тихо. Шутки кончились — как и я, в некотором смысле.'] },
+    ],
+  },
+  casemate_warden: {
+    id: 'casemate_warden',
+    name: 'Страж каземата',
+    look: { body: 0x4a4458, skin: 0x8f8898, hat: 0x2b2633 },
+    scripts: [
+      { when: [{ type: 'bossDefeated', bossId: 'casemate_warden', value: true }], lines: ['Камера пуста. Иди.'] },
+      {
+        lines: ['Квест тебя сюда не посылал. Но колода при мне — и я не отдам её просто так.'],
+        effects: [{ type: 'startBattle', bossId: 'casemate_warden' }],
+      },
+    ],
+  },
+  crystal_golem: {
+    id: 'crystal_golem',
+    name: 'Кристальный голем',
+    look: { body: 0x9b6bd6, skin: 0x3a2f4a, hat: 0x241d33 },
+    scripts: [
+      { when: [{ type: 'bossDefeated', bossId: 'crystal_golem', value: true }], lines: ['Тихо здесь. Было тихо и будет.'] },
+      {
+        lines: ['Чужак в моих пещерах. Кристаллы не любят чужаков.'],
+        effects: [{ type: 'startBattle', bossId: 'crystal_golem' }],
+      },
+    ],
+  },
+  prospector: {
+    id: 'prospector',
+    name: 'Старатель Фёдор',
+    look: { body: 0x6b5a3f, skin: 0xc98f6b, hat: 0x8a5a2b },
+    scripts: [
+      {
+        lines: ['Кристаллы здесь звенят, если знать, как слушать. Попробуешь на память?'],
+        effects: [{ type: 'startMinigame', minigameId: 'cave_memory' }],
+      },
+    ],
+  },
+  puzzle_keeper: {
+    id: 'puzzle_keeper',
+    name: 'Отшельница Зоя',
+    look: { body: 0x7a5a8a, skin: 0xe0ac7e, hat: 0x3a2f4a },
+    scripts: [
+      {
+        lines: ['Старая головоломка в сумке совсем разболталась — числа разбежались по клеткам. Собери их по порядку?'],
+        effects: [{ type: 'startMinigame', minigameId: 'forest_puzzle' }],
+      },
+    ],
+  },
+  stranded_pilot: {
+    id: 'stranded_pilot',
+    name: 'Пилот Эрик',
+    look: { body: 0x55607a, skin: 0xc98f6b, hat: 0x6bd6e3 },
+    scripts: [
+      {
+        when: [{ type: 'questStatus', questId: 'lost_pilot', status: 'inactive' }],
+        lines: ['Эта капсула списана. Если ты не из экипажа — проходи мимо.'],
+      },
+      {
+        when: [{ type: 'questStatus', questId: 'lost_pilot', status: 'active' }],
+        lines: [
+          'Капитан Пустоты наконец проиграла? Не верится.',
+          'Я прятался здесь с тех пор, как станция перешла к ней — не всем нравится служить тому, кто играет на жизни экипажа.',
+          'Возьми вот это — капсула засекла комету ещё до того, как я спрятался. Может, пригодится в бою.',
+        ],
+      },
+      { lines: ['Станция свободна — но я, пожалуй, останусь здесь ещё немного.'] },
+    ],
+  },
   keeper: {
     id: 'keeper',
     name: 'Хранитель Колоды',
@@ -246,6 +476,18 @@ export const npcs: Record<string, NpcDef> = {
           'Звёздные врата в углу зала открыты. Верни карты, Странник.',
         ],
         effects: [{ type: 'startQuest', questId: 'beyond' }],
+      },
+      {
+        when: [
+          { type: 'bossDefeated', bossId: 'keeper', value: true },
+          { type: 'questStatus', questId: 'forgotten_jester', status: 'inactive' },
+        ],
+        lines: [
+          'Погоди.',
+          'За западной дверью зала — старый каземат. Я давно забыл, кого там держат.',
+          'Если услышишь смех — не пугайся, это не угроза.',
+        ],
+        effects: [{ type: 'startQuest', questId: 'forgotten_jester' }],
       },
       {
         when: [{ type: 'bossDefeated', bossId: 'keeper', value: true }],

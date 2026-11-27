@@ -1,10 +1,11 @@
 import type { AiLevel, CardEffect } from '../content/types';
 import type { AttackTarget, BattleState, CardBattle, Side, UnitState } from './cardBattle';
-import { opponentOf } from './cardBattle';
+import { opponentOf, RAGE_BURST_DAMAGE } from './cardBattle';
 
 export type AiAction =
   | { type: 'play'; handIndex: number; target?: AttackTarget }
   | { type: 'power'; target?: AttackTarget }
+  | { type: 'rage' }
   | { type: 'attack'; attackerUid: number; target: AttackTarget }
   | { type: 'endTurn' };
 
@@ -87,6 +88,11 @@ const chooseGreedyAction = (battle: CardBattle, side: Side): AiAction | null => 
     return target ? { type: 'power', target } : { type: 'power' };
   }
 
+  // Ярость не тратит ману — используем сразу, как только накопилась.
+  if (battle.canUseRage(side).ok && !isWasted({ type: 'damageEnemyHero', amount: RAGE_BURST_DAMAGE }, state, side)) {
+    return { type: 'rage' };
+  }
+
   const attacker = own.board.find((unit) => unit.canAttack && unit.attack > 0);
   if (attacker) {
     const foeBoard = state.sides[opponentOf(side)].board;
@@ -116,6 +122,7 @@ const chooseGreedyAction = (battle: CardBattle, side: Side): AiAction | null => 
 const applyAction = (battle: CardBattle, side: Side, action: AiAction): void => {
   if (action.type === 'play') battle.playCard(side, action.handIndex, action.target);
   else if (action.type === 'power') battle.usePower(side, action.target);
+  else if (action.type === 'rage') battle.useRage(side);
   else if (action.type === 'attack') battle.attack(side, action.attackerUid, action.target);
   else battle.endTurn(side);
 };
@@ -153,6 +160,7 @@ const candidateActions = (battle: CardBattle, side: Side): AiAction[] => {
     if (targets.length === 0) actions.push({ type: 'power' });
     else for (const target of targets) actions.push({ type: 'power', target });
   }
+  if (battle.canUseRage(side).ok) actions.push({ type: 'rage' });
   const targets = battle.validTargets(side);
   for (const unit of own.board) {
     if (!unit.canAttack || unit.attack <= 0) continue;

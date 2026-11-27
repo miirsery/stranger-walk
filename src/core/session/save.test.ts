@@ -37,7 +37,8 @@ describe('сохранение прогресса', () => {
     expect(restored.cards.list()).toEqual(original.cards.list());
     expect(restored.cards.deck).toEqual(original.cards.deck);
     expect(restored.cards.deck).not.toContain('sprout');
-    expect(restored.serialize()).toEqual(original.serialize());
+    // savedAt — это момент вызова serialize(), у двух вызовов подряд он неизбежно разный.
+    expect({ ...restored.serialize(), savedAt: 0 }).toEqual({ ...original.serialize(), savedAt: 0 });
   });
 
   it('помнит побеждённых боссов и выигранные мини-игры', () => {

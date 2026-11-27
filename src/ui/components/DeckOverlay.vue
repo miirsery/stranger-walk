@@ -59,6 +59,19 @@ const remove = (cardId: string): void => {
   if (index >= 0) deck.splice(index, 1);
   apply(deck);
 };
+
+// ---------- Артефакты ----------
+// Экипировка вне боя — не карты, слот один; владение и выбор живут в сессии, не в колоде.
+const artifacts = computed(() => {
+  void version.value;
+  return props.session.artifacts();
+});
+
+const toggleArtifact = (artifactId: string, equipped: boolean, owned: boolean): void => {
+  if (!owned) return;
+  props.session.equipArtifact(equipped ? null : artifactId);
+  version.value += 1;
+};
 </script>
 
 <template>
@@ -74,6 +87,24 @@ const remove = (cardId: string): void => {
       <p class="deck__hint">
         В бой идут только карты из колоды. Не больше {{ rules.maxCopies }} копий одной карты.
       </p>
+      <section class="deck__artifacts" aria-label="Артефакты">
+        <h3 class="deck__artifacts-title">Артефакты · экипирован один</h3>
+        <ul class="deck__artifact-list">
+          <li v-for="entry in artifacts" :key="entry.def.id">
+            <button
+              type="button"
+              class="pixel-button deck__artifact"
+              :class="{ 'pixel-button--ghost': !entry.equipped, 'deck__artifact--locked': !entry.owned }"
+              :disabled="!entry.owned"
+              :title="entry.owned ? entry.def.description : 'Ещё не найден — продаётся у торговца'"
+              @click="toggleArtifact(entry.def.id, entry.equipped, entry.owned)"
+            >
+              {{ entry.owned ? entry.def.name : '?' }}
+              <span v-if="entry.equipped" class="deck__artifact-tag">экипирован</span>
+            </button>
+          </li>
+        </ul>
+      </section>
       <p class="deck__error" aria-live="polite">{{ error }}</p>
       <ul class="deck__grid">
         <li v-for="row in rows" :key="row.card.id" class="deck__item" :class="{ 'deck__item--out': row.inDeck === 0 }">
@@ -151,6 +182,37 @@ const remove = (cardId: string): void => {
 
 .deck__hint {
   color: var(--muted);
+}
+
+.deck__artifacts-title {
+  font-size: 9px;
+  color: var(--gold);
+}
+
+.deck__artifact-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 4px 0 0;
+  list-style: none;
+}
+
+.deck__artifact {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  font-size: 8px;
+}
+
+.deck__artifact--locked {
+  color: var(--muted);
+  cursor: default;
+}
+
+.deck__artifact-tag {
+  font-size: 7px;
+  color: var(--green);
 }
 
 .deck__error {

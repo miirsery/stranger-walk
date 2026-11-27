@@ -33,7 +33,11 @@ export const validateContent = (content: GameContent): string[] => {
   const checkConditions = (conditions: Condition[] | undefined, where: string): void => {
     for (const condition of conditions ?? []) {
       if (condition.type === 'questStatus') need(content.quests, 'квест', condition.questId, where);
-      else need(content.bosses, 'босс', condition.bossId, where);
+      else if (condition.type === 'bossDefeated') need(content.bosses, 'босс', condition.bossId, where);
+      else if (condition.type === 'reputation' && condition.atLeast === undefined && condition.atMost === undefined) {
+        errors.push(`${where}: условие по репутации без atLeast и atMost`);
+      }
+      // flag: идентификатор свободный, проверять ссылочно не на что.
     }
   };
 
@@ -53,11 +57,21 @@ export const validateContent = (content: GameContent): string[] => {
           needCards(effect.cardIds, where);
           break;
         case 'openTrade':
-          if (effect.offers.length === 0) errors.push(`${where}: торговец ничего не продаёт`);
+          if (effect.offers.length === 0 && !effect.artifactOffers?.length) errors.push(`${where}: торговец ничего не продаёт`);
           for (const offer of effect.offers) {
             need(content.cards, 'карта', offer.cardId, where);
             if (offer.price <= 0) errors.push(`${where}: цена «${offer.cardId}» должна быть больше нуля`);
           }
+          for (const offer of effect.artifactOffers ?? []) {
+            need(content.artifacts, 'артефакт', offer.artifactId, where);
+            if (offer.price <= 0) errors.push(`${where}: цена «${offer.artifactId}» должна быть больше нуля`);
+          }
+          break;
+        case 'setFlag':
+          if (!effect.flagId) errors.push(`${where}: setFlag без flagId`);
+          break;
+        case 'changeReputation':
+          if (effect.amount === 0) errors.push(`${where}: changeReputation с нулевым amount`);
           break;
       }
     }
@@ -141,6 +155,7 @@ export const validateContent = (content: GameContent): string[] => {
       if (object.type === 'chest') {
         needCards(object.choices, `${where}, ${at}`);
         if (object.choices.length < 2) errors.push(`${where}: ${at} — в сундуке нужен выбор минимум из двух карт`);
+        needCards(object.guaranteed ?? [], `${where}, ${at}`);
       }
       if (object.type === 'lever') {
         if (object.opens.length === 0) errors.push(`${where}: ${at} — рычаг ничего не открывает`);
@@ -160,6 +175,11 @@ export const validateContent = (content: GameContent): string[] => {
       if (script.lines.length === 0) errors.push(`NPC ${npc.id}: сценарий без реплик`);
       checkConditions(script.when, `NPC ${npc.id}`);
       checkEffects(script.effects, `NPC ${npc.id}`);
+      if (script.choices && script.choices.length < 2) errors.push(`NPC ${npc.id}: выбор в диалоге нужен минимум из двух вариантов`);
+      for (const choice of script.choices ?? []) {
+        if (choice.lines.length === 0) errors.push(`NPC ${npc.id}: вариант «${choice.text}» без реплик`);
+        checkEffects(choice.effects, `NPC ${npc.id}, вариант «${choice.text}»`);
+      }
     }
   }
 
@@ -223,6 +243,17 @@ export const validateContent = (content: GameContent): string[] => {
         errors.push(`Мини-игра ${minigame.id}: нужны минимум 2 разные карты без повторов`);
       }
     }
+    if (minigame.type === 'rhythm') {
+      const tokens = minigame.pattern.split(/\s+/);
+      if (tokens.some((token) => token !== 'X' && token !== '-')) {
+        errors.push(`Мини-игра ${minigame.id}: pattern может содержать только 'X' и '-'`);
+      }
+      if (!tokens.includes('X')) errors.push(`Мини-игра ${minigame.id}: pattern не содержит ни одной ноты`);
+    }
+    if (minigame.type === 'slide') {
+      if (minigame.size < 2) errors.push(`Мини-игра ${minigame.id}: size должен быть не меньше 2`);
+      if (minigame.maxMoves <= 0) errors.push(`Мини-игра ${minigame.id}: maxMoves должен быть больше нуля`);
+    }
   }
 
   need(content.levels, 'уровень', content.player.startLevel, 'Игрок');
@@ -231,10 +262,30 @@ export const validateContent = (content: GameContent): string[] => {
     errors.push('Игрок: некорректная сила героя');
   }
   needCards(content.player.starterDeck, 'Игрок');
-  const { minSize, maxSize } = content.deckRules;
+  const { minSize, maxSize, maxCopies } = content.deckRules;
   if (content.player.starterDeck.length < minSize || content.player.starterDeck.length > maxSize) {
     errors.push('Игрок: стартовая колода не укладывается в правила колоды');
   }
+
+  if (content.starterDecks.length === 0) errors.push('Нет ни одного варианта стартовой колоды');
+  for (const deck of content.starterDecks) {
+    const where = `Стартовая колода «${deck.id}»`;
+    needCards(deck.cards, where);
+    if (deck.cards.length < minSize || deck.cards.length > maxSize) errors.push(`${where}: не укладывается в правила колоды`);
+    const counts = new Map<string, number>();
+    for (const cardId of deck.cards) counts.set(cardId, (counts.get(cardId) ?? 0) + 1);
+    for (const [cardId, count] of counts) {
+      if (count > maxCopies) errors.push(`${where}: карта «${cardId}» встречается чаще, чем разрешено`);
+    }
+  }
+
+  for (const artifact of Object.values(content.artifacts)) {
+    if (artifact.effect.amount <= 0) errors.push(`Артефакт ${artifact.id}: эффект должен быть больше нуля`);
+  }
+
+  needCards(content.secretEnding.requiredCards, 'Секретная концовка');
+  if (content.secretEnding.requiredCards.length === 0) errors.push('Секретная концовка: не задано ни одной нужной карты');
+  if (content.secretEnding.lines.length === 0) errors.push('Секретная концовка: нет реплик');
 
   return errors;
 };

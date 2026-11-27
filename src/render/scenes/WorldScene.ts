@@ -7,14 +7,16 @@ import type { RenderContext } from '../context';
 import { getRenderContext, SCENE_KEYS } from '../context';
 import type { Facing } from '@core/world/world';
 import {
+  ART_SETTING_IDS,
   characterFrame,
+  CHARACTER_ART_IDS,
   ensureCharacterTexture,
   ensureIconTexture,
   ensureParticleTexture,
   ensureTilesetTexture,
   isAnimatedTile,
   PARTICLE_TEXTURE,
-  preloadArt,
+  queueArt,
 } from '../textures';
 
 const CAMERA_LERP = 0.12;
@@ -77,14 +79,20 @@ export class WorldScene extends Phaser.Scene {
     super(SCENE_KEYS.world);
   }
 
-  /** Очередь загрузки готового арта — к моменту `create()` он уже на месте (см. `textures.ts`). */
+  /**
+   * Код-сплиттинг по сеттингам: грузим только арт текущего уровня — к моменту `create()`
+   * он уже на месте (см. `textures.ts`). Остальные миры подгружаются в фоне из `create()`.
+   */
   preload(): void {
-    preloadArt(this);
+    const { session } = getRenderContext(this);
+    const level = session.world.level;
+    queueArt(this, [level.setting], ['player', ...level.npcs.map((npc) => npc.npcId)]);
   }
 
   create(): void {
     this.ctx = getRenderContext(this);
     const { session } = this.ctx;
+    this.prefetchRemainingArt();
 
     const playerKey = ensureCharacterTexture(this, 'char-player', 'player', session.content.data.player.look);
     this.player = this.add.sprite(0, 0, playerKey, 0).setDepth(10);
@@ -203,6 +211,17 @@ export class WorldScene extends Phaser.Scene {
     this.animateTiles();
     this.updateAmbientSources();
     this.updateParticles(delta);
+  }
+
+  /**
+   * Арт остальных сеттингов и персонажей — в фоне, без ожидания: сцена уже отрисована,
+   * загрузка не блокирует её. К моменту, когда игрок доберётся до нового мира, он обычно уже готов.
+   */
+  private prefetchRemainingArt(): void {
+    const level = this.ctx.session.world.level;
+    const remainingSettings = ART_SETTING_IDS.filter((id) => id !== level.setting);
+    queueArt(this, remainingSettings, CHARACTER_ART_IDS);
+    if (this.load.list.size > 0) this.load.start();
   }
 
   /** Текстура объекта с учётом его текущего состояния (открыт сундук/дверь, потянут ли рычаг). */

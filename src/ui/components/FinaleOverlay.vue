@@ -2,7 +2,7 @@
 import { RouterLink } from 'vue-router';
 
 defineProps<{ title: string; lines: string[] }>();
-defineEmits<{ close: [] }>();
+defineEmits<{ close: []; newGamePlus: [] }>();
 </script>
 
 <template>
@@ -11,6 +11,9 @@ defineEmits<{ close: [] }>();
       <h2 class="finale__title">{{ title }}</h2>
       <p v-for="(line, index) in lines" :key="index" class="finale__line">{{ line }}</p>
       <button type="button" class="pixel-button" autofocus @click="$emit('close')">Продолжить</button>
+      <button type="button" class="pixel-button pixel-button--ghost" @click="$emit('newGamePlus')">
+        Начать заново (New Game+)
+      </button>
       <RouterLink class="pixel-button pixel-button--ghost" to="/">В главное меню</RouterLink>
     </div>
   </div>

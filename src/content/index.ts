@@ -1,4 +1,5 @@
 import type { GameContent } from '@core/content/types';
+import { artifacts } from './artifacts';
 import { bosses } from './bosses';
 import { cards } from './cards';
 import { levels } from './levels';
@@ -6,7 +7,9 @@ import { minigames } from './minigames';
 import { music } from './music';
 import { npcs } from './npcs';
 import { quests } from './quests';
+import { secretEnding } from './secretEnding';
 import { settings } from './settings';
+import { starterDecks } from './starterDecks';
 import { hints, story } from './story';
 
 /** Весь контент игры одним объектом. Новый контент подключается здесь. */
@@ -25,6 +28,7 @@ export const gameContent: GameContent = {
     starterDeck: ['sprout', 'sprout', 'scarecrow', 'scarecrow', 'fox', 'fox', 'reaper', 'reaper'],
   },
   deckRules: { minSize: 8, maxSize: 20, maxCopies: 2 },
+  starterDecks,
   settings,
   levels,
   npcs,
@@ -32,7 +36,9 @@ export const gameContent: GameContent = {
   cards,
   bosses,
   minigames,
+  artifacts,
   music,
   story,
   hints,
+  secretEnding,
 };

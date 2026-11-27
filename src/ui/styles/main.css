@@ -10,6 +10,10 @@
   --red: #e0584f;
   --green: #6fcf7a;
   --blue: #5aa9e6;
+  --cost: #3d6fd9;
+  --attack: #c7772a;
+  --epic: #b06fd8;
+  --effect: #7a4fb5;
   --px: 4px;
   font-family: 'Press Start 2P', ui-monospace, monospace;
   font-size: 12px;
@@ -18,6 +22,31 @@
   background: var(--ink);
   -webkit-font-smoothing: none;
   font-smooth: never;
+}
+
+/*
+ * Режим высокой контрастности (настройка «Контраст»): максимальная яркостная разница
+ * фон/текст и оттенки, различимые при дальтонизме (красный и зелёный раздвинуты
+ * по светлоте и смещены — к оранжевому и бирюзовому, — а не только по тону).
+ */
+:root[data-contrast] {
+  --ink: #000000;
+  --night: #000000;
+  --panel: #141414;
+  --panel-light: #262626;
+  --edge: #ffffff;
+  --text: #ffffff;
+  --muted: #d6d6d6;
+  --gold: #ffd400;
+  --red: #ff5a36;
+  --green: #00c2a8;
+  --blue: #4da6ff;
+  --cost: #2f6fe0;
+  --attack: #ff8c2b;
+  /* Карта всегда светлая (`--text` — фон лица карты), поэтому эти два читаются по ней
+     и должны оставаться тёмными, а не светлеть вместе с остальной палитрой. */
+  --epic: #7a1fcf;
+  --effect: #5b2e9e;
 }
 
 *,

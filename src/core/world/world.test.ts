@@ -94,9 +94,9 @@ describe('WorldState', () => {
     world.openDoor('garden_door');
     expect(world.isDoorOpen('garden_door')).toBe(true);
     run(world, 3000, 0, -1);
-    // За дверью сразу стоит табличка — она тоже непроходима, читать её можно от двери.
+    // За дверью сразу стоит сундук — он тоже непроходим, открыть его можно от двери.
     expect(world.playerTile).toEqual({ x: 20, y: 3 });
-    expect(world.findInteractable()).toMatchObject({ kind: 'object', object: { id: 'garden_sign' } });
+    expect(world.findInteractable()).toMatchObject({ kind: 'object', object: { id: 'garden_chest' } });
   });
 
   it('загрузка уровня сбрасывает открытые двери до `setOpenDoors`', () => {

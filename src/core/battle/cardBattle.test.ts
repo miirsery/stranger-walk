@@ -3,7 +3,7 @@ import type { CardDef, CardEffect, CardKeyword } from '../content/types';
 import { createRng } from '../util/rng';
 import { chooseAiAction, performAiStep, playAiTurn } from './ai';
 import type { BattleRules } from './cardBattle';
-import { CardBattle } from './cardBattle';
+import { CardBattle, RAGE_BURST_DAMAGE } from './cardBattle';
 
 const unit = (
   id: string,
@@ -489,6 +489,70 @@ describe('сила героя', () => {
     battle.endTurn('player');
     expect(performAiStep(battle, 'enemy')).toEqual({ type: 'power' });
     expect(battle.snapshot().sides.player.hero.health).toBe(9);
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'endTurn' });
+  });
+});
+
+describe('ярость', () => {
+  it('растёт на 1 с каждой атакой и открывает взрыв только при максимуме', () => {
+    const battle = createBattle(many('rusher', 3), [], { maxRage: 2 }, 30);
+    battle.playCard('player', 0);
+    const first = battle.snapshot().sides.player.board[0] as { uid: number };
+    battle.attack('player', first.uid, { type: 'hero' });
+    expect(battle.snapshot().sides.player.rage).toBe(1);
+    expect(battle.canUseRage('player').ok).toBe(false);
+
+    battle.endTurn('player');
+    battle.endTurn('enemy');
+    battle.playCard('player', 0);
+    const second = battle.snapshot().sides.player.board[1] as { uid: number };
+    battle.attack('player', second.uid, { type: 'hero' });
+    expect(battle.snapshot().sides.player.rage).toBe(2);
+    expect(battle.canUseRage('player')).toEqual({ ok: true });
+  });
+
+  it('взрыв не тратит ману, сбрасывает ярость и бьёт героя врага', () => {
+    const battle = createBattle(many('rusher', 1), [], { maxRage: 1 }, 30);
+    battle.playCard('player', 0);
+    const attacker = battle.snapshot().sides.player.board[0] as { uid: number };
+    battle.attack('player', attacker.uid, { type: 'hero' });
+    const manaBefore = battle.snapshot().sides.player.mana;
+    const healthBefore = battle.snapshot().sides.enemy.hero.health;
+
+    expect(battle.useRage('player')).toEqual({ ok: true });
+    expect(battle.snapshot().sides.player.mana).toBe(manaBefore);
+    expect(battle.snapshot().sides.player.rage).toBe(0);
+    expect(battle.snapshot().sides.enemy.hero.health).toBe(healthBefore - RAGE_BURST_DAMAGE);
+    expect(battle.useRage('player')).toEqual({ ok: false, reason: 'Ярость ещё не накопилась' });
+  });
+
+  it('недоступен не в свой ход и когда бой окончен', () => {
+    const battle = createBattle(many('rusher', 1), [], { maxRage: 1 }, 30);
+    expect(battle.useRage('enemy')).toEqual({ ok: false, reason: 'Сейчас не ваш ход' });
+    battle.playCard('player', 0);
+    const attacker = battle.snapshot().sides.player.board[0] as { uid: number };
+    battle.attack('player', attacker.uid, { type: 'hero' });
+    battle.useRage('player');
+    battle.endTurn('player');
+    expect(battle.useRage('enemy')).toEqual({ ok: false, reason: 'Ярость ещё не накопилась' });
+  });
+
+  it('ИИ применяет взрыв, когда он накопился и больше нечем ходить', () => {
+    const battle = new CardBattle({
+      resolveCard,
+      player: { name: 'Игрок', health: 30, deck: [] },
+      enemy: { name: 'Враг', health: 30, deck: many('rusher', 1) },
+      rng: createRng(42),
+      rules: { maxRage: 1 },
+    });
+    battle.endTurn('player');
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'play', handIndex: 0 });
+    const attacker = battle.snapshot().sides.enemy.board[0] as { uid: number };
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'attack', attackerUid: attacker.uid, target: { type: 'hero' } });
+    expect(battle.snapshot().sides.enemy.rage).toBe(1);
+    const healthBefore = battle.snapshot().sides.player.hero.health;
+    expect(performAiStep(battle, 'enemy')).toEqual({ type: 'rage' });
+    expect(battle.snapshot().sides.player.hero.health).toBe(healthBefore - RAGE_BURST_DAMAGE);
     expect(performAiStep(battle, 'enemy')).toEqual({ type: 'endTurn' });
   });
 });

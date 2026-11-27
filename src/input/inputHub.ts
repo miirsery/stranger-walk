@@ -2,21 +2,32 @@ import type { MoveInput } from '@core/world/world';
 
 type ActionListener = () => void;
 
-const MOVE_KEYS: Record<string, MoveInput> = {
+/** Форма совпадает с `KeyBindings` из `ui/stores/settings` — хаб не зависит от Vue-слоя. */
+export interface InputKeyBindings {
+  moveUp: string;
+  moveDown: string;
+  moveLeft: string;
+  moveRight: string;
+  action: string;
+}
+
+/** Стрелки и Space/Enter всегда работают в своей роли — запасной путь поверх переназначаемых клавиш. */
+const FIXED_MOVE_KEYS: Record<string, MoveInput> = {
   ArrowUp: { x: 0, y: -1 },
-  KeyW: { x: 0, y: -1 },
   ArrowDown: { x: 0, y: 1 },
-  KeyS: { x: 0, y: 1 },
   ArrowLeft: { x: -1, y: 0 },
-  KeyA: { x: -1, y: 0 },
   ArrowRight: { x: 1, y: 0 },
-  KeyD: { x: 1, y: 0 },
+};
+const FIXED_ACTION_KEYS = new Set(['Space', 'Enter']);
+
+const MOVE_DIRECTION_BY_ROLE: Record<'moveUp' | 'moveDown' | 'moveLeft' | 'moveRight', MoveInput> = {
+  moveUp: { x: 0, y: -1 },
+  moveDown: { x: 0, y: 1 },
+  moveLeft: { x: -1, y: 0 },
+  moveRight: { x: 1, y: 0 },
 };
 
-const ACTION_KEYS = new Set(['KeyE', 'Space', 'Enter']);
-
-/** Стандартная раскладка геймпада: A/крест — действие, крестовина — кнопки 12–15. */
-const PAD_ACTION = 0;
+/** Стандартная раскладка геймпада: крестовина — кнопки 12–15, кнопка действия переназначаема. */
 const PAD_UP = 12;
 const PAD_DOWN = 13;
 const PAD_LEFT = 14;
@@ -42,14 +53,40 @@ export class InputHub {
   private readonly actionListeners = new Set<ActionListener>();
   private padSource: PadSource | null = null;
   private padActionHeld = false;
+  private padActionButton = 0;
+  /** Переназначаемые «основные» клавиши движения; стрелки поверх них — см. `FIXED_MOVE_KEYS`. */
+  private configuredMoveKeys: Record<string, MoveInput> = {
+    KeyW: MOVE_DIRECTION_BY_ROLE.moveUp,
+    KeyS: MOVE_DIRECTION_BY_ROLE.moveDown,
+    KeyA: MOVE_DIRECTION_BY_ROLE.moveLeft,
+    KeyD: MOVE_DIRECTION_BY_ROLE.moveRight,
+  };
+  private primaryActionKey = 'KeyE';
+
+  /** Переназначает «основные» клавиши движения и действия (стрелки и Space/Enter остаются запасным путём). */
+  setKeyBindings(bindings: InputKeyBindings): void {
+    this.configuredMoveKeys = {
+      [bindings.moveUp]: MOVE_DIRECTION_BY_ROLE.moveUp,
+      [bindings.moveDown]: MOVE_DIRECTION_BY_ROLE.moveDown,
+      [bindings.moveLeft]: MOVE_DIRECTION_BY_ROLE.moveLeft,
+      [bindings.moveRight]: MOVE_DIRECTION_BY_ROLE.moveRight,
+    };
+    this.primaryActionKey = bindings.action;
+  }
+
+  /** Переназначает кнопку геймпада, которая считается «действием» (по умолчанию 0 — A/крест). */
+  setPadActionButton(index: number): void {
+    this.padActionButton = index;
+  }
 
   /** Подключает клавиатуру. Возвращает функцию отключения. */
   attachKeyboard(target: Window): () => void {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.code in MOVE_KEYS) {
+      const direction = FIXED_MOVE_KEYS[event.code] ?? this.configuredMoveKeys[event.code];
+      if (direction) {
         this.pressed.add(event.code);
         event.preventDefault();
-      } else if (ACTION_KEYS.has(event.code)) {
+      } else if (FIXED_ACTION_KEYS.has(event.code) || event.code === this.primaryActionKey) {
         event.preventDefault();
         if (!event.repeat) this.triggerAction();
       }
@@ -103,7 +140,7 @@ export class InputHub {
     let x = this.virtual.x;
     let y = this.virtual.y;
     for (const code of this.pressed) {
-      const direction = MOVE_KEYS[code];
+      const direction = FIXED_MOVE_KEYS[code] ?? this.configuredMoveKeys[code];
       if (direction) {
         x += direction.x;
         y += direction.y;
@@ -128,7 +165,7 @@ export class InputHub {
       return Math.abs(value) < PAD_DEAD_ZONE ? 0 : value;
     };
 
-    const action = held(PAD_ACTION);
+    const action = held(this.padActionButton);
     if (action && !this.padActionHeld) this.triggerAction();
     this.padActionHeld = action;
 

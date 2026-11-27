@@ -3,14 +3,12 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { gameContent } from '@content/index';
 import { audio } from '@/audio/chiptune';
-import { localSaveStorage } from '@/platform/saveStorage';
+import ChangelogOverlay from '../components/ChangelogOverlay.vue';
+import type { ChangelogEntry } from '../changelog';
+import { CHANGELOG, CURRENT_VERSION } from '../changelog';
 import { useSettingsStore } from '../stores/settings';
 
-useSettingsStore();
-
-const hasSave = localSaveStorage.exists();
-// Новая игра стирает сохранение, поэтому при его наличии просим подтвердить вторым нажатием.
-const confirmingNew = ref(false);
+const settings = useSettingsStore();
 
 const items = [
   { to: '/controls', label: 'Управление' },
@@ -19,14 +17,33 @@ const items = [
   { to: '/settings', label: 'Настройки' },
 ];
 
+/** Записи с момента последнего показанного «что нового» — те же до текущей версии. */
+const unseenChangelog = ref<ChangelogEntry[]>([]);
+
 // Музыка меню — тема стартового мира; зазвучит после первого жеста пользователя.
 onMounted(() => {
   audio.playTrack(gameContent.music.fields ?? null);
-  // Пока игрок в меню, заранее скачиваем движок и экран игры — старт будет быстрее.
+  // Пока игрок в меню, заранее скачиваем движок и экраны выбора слота/колоды/игры — старт будет быстрее.
   void import('@/render/createGame');
+  void import('./SaveSlotsView.vue');
+  void import('./ChooseDeckView.vue');
   void import('./GameView.vue');
+
+  // Первый запуск вообще (или до появления этой фичи) — не показываем историю, просто запоминаем версию.
+  if (!settings.lastSeenVersion) {
+    settings.lastSeenVersion = CURRENT_VERSION;
+    return;
+  }
+  if (settings.lastSeenVersion === CURRENT_VERSION) return;
+  const index = CHANGELOG.findIndex((entry) => entry.version === settings.lastSeenVersion);
+  unseenChangelog.value = index === -1 ? CHANGELOG : CHANGELOG.slice(0, index);
 });
 onBeforeUnmount(() => audio.playTrack(null));
+
+const closeChangelog = (): void => {
+  unseenChangelog.value = [];
+  settings.lastSeenVersion = CURRENT_VERSION;
+};
 </script>
 
 <template>
@@ -36,24 +53,14 @@ onBeforeUnmount(() => audio.playTrack(null));
       <p class="menu__kicker">пиксельная карточная RPG</p>
       <h1 class="menu__title">Stranger<br />Walk</h1>
       <nav class="menu__nav" aria-label="Главное меню">
-        <template v-if="hasSave">
-          <RouterLink class="pixel-button menu__play" :to="{ path: '/play', query: { continue: '1' } }">
-            Продолжить
-          </RouterLink>
-          <RouterLink v-if="confirmingNew" class="pixel-button pixel-button--danger" to="/play">
-            Стереть прогресс и начать
-          </RouterLink>
-          <button v-else type="button" class="pixel-button pixel-button--ghost" @click="confirmingNew = true">
-            Новая игра
-          </button>
-        </template>
-        <RouterLink v-else class="pixel-button menu__play" to="/play">Играть</RouterLink>
+        <RouterLink class="pixel-button menu__play" to="/slots">Играть</RouterLink>
         <RouterLink v-for="item in items" :key="item.to" class="pixel-button pixel-button--ghost" :to="item.to">
           {{ item.label }}
         </RouterLink>
       </nav>
-      <p class="menu__version">MVP 0.2 · прогресс сохраняется в этом браузере</p>
+      <p class="menu__version">MVP {{ CURRENT_VERSION }} · прогресс сохраняется в этом браузере</p>
     </div>
+    <ChangelogOverlay v-if="unseenChangelog.length > 0" :entries="unseenChangelog" @close="closeChangelog" />
   </main>
 </template>
 

@@ -31,7 +31,7 @@ export default defineConfig({
       workbox: {
         // Движок (createGame) и экран игры (GameView) скачиваются лениво — кэшировать их тоже,
         // иначе офлайн-открытие уровня после установки не сработает.
-        globPatterns: ['**/*.{js,css,html,woff,woff2,png}'],
+        globPatterns: ['**/*.{js,css,html,woff,woff2,png,webp}'],
       },
     }),
   ],

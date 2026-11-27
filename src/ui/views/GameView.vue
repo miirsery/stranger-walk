@@ -14,7 +14,10 @@ import JournalOverlay from '../components/JournalOverlay.vue';
 import MemoryBoard from '../components/MemoryBoard.vue';
 import MinigameHud from '../components/MinigameHud.vue';
 import PauseMenu from '../components/PauseMenu.vue';
+import PerfMonitor from '../components/PerfMonitor.vue';
 import RewardOverlay from '../components/RewardOverlay.vue';
+import SaveIndicator from '../components/SaveIndicator.vue';
+import SlideBoard from '../components/SlideBoard.vue';
 import StorySceneOverlay from '../components/StorySceneOverlay.vue';
 import TouchControls from '../components/TouchControls.vue';
 import TradeOverlay from '../components/TradeOverlay.vue';
@@ -24,7 +27,13 @@ import { useSettingsStore } from '../stores/settings';
 const container = ref<HTMLElement | null>(null);
 const route = useRoute();
 const router = useRouter();
-const game = useGame(container, { storage: localSaveStorage, continueGame: route.query.continue === '1' });
+const slot = typeof route.query.slot === 'string' && Number.isInteger(Number(route.query.slot)) ? Number(route.query.slot) : 0;
+const game = useGame(container, {
+  storage: localSaveStorage,
+  continueGame: route.query.continue === '1',
+  slot,
+  starterDeckId: typeof route.query.deck === 'string' ? route.query.deck : undefined,
+});
 const debug = isDebugEnabled();
 const {
   session,
@@ -35,6 +44,8 @@ const {
   loading,
   levelName,
   dialog,
+  dialogRevealedText,
+  dialogFullyRevealed,
   battle,
   quests,
   cardTotal,
@@ -46,16 +57,20 @@ const {
   interactTarget,
   rewardOptions,
   tradeOffers,
+  tradeArtifactOffers,
   finale,
   scene,
+  lastSavedAt,
 } = game;
 const settings = useSettingsStore();
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
 const showTouch = computed(
   () =>
-    // Джойстик нужен только там, где есть движение: в мире и в идущей мини-игре с полем.
-    (modeKind.value === 'world' || (minigameType.value === 'catch' && minigamePhase.value === 'playing')) &&
+    // Джойстик и кнопка действия нужны в мире и в идущей мини-игре с полем или кнопкой удара.
+    (modeKind.value === 'world' ||
+      ((minigameType.value === 'catch' || minigameType.value === 'fishing' || minigameType.value === 'rhythm') &&
+        minigamePhase.value === 'playing')) &&
     !loading.value &&
     !paused.value &&
     panel.value === null &&
@@ -64,12 +79,14 @@ const showTouch = computed(
 
 const onKeyDown = (event: KeyboardEvent): void => {
   if (loading.value) return;
-  if (event.code === 'Escape') {
+  const bindings = settings.keyBindings;
+  // Escape работает как запасной путь на паузу, даже если «Пауза» переназначена на другую клавишу.
+  if (event.code === 'Escape' || event.code === bindings.pause) {
     if (panel.value) game.setPanel(null);
     else game.setPaused(!paused.value);
-  } else if (event.code === 'KeyC' && !event.repeat) {
+  } else if (event.code === bindings.deck && !event.repeat) {
     game.setPanel(panel.value === 'deck' ? null : 'deck');
-  } else if (event.code === 'KeyJ' && !event.repeat) {
+  } else if (event.code === bindings.journal && !event.repeat) {
     game.setPanel(panel.value === 'journal' ? null : 'journal');
   }
 };
@@ -99,20 +116,42 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
         @open-journal="game.setPanel('journal')"
       />
       <MemoryBoard v-if="minigameType === 'memory' && minigamePhase !== 'intro'" :session="session" />
+      <SlideBoard v-if="minigameType === 'slide' && minigamePhase !== 'intro'" :session="session" />
       <MinigameHud v-if="minigamePhase" :session="session" :phase="minigamePhase" />
       <BattleOverlay v-if="battle" :session="session" :state="battle" />
       <TouchControls v-if="showTouch" :input="input" />
       <p v-if="interactTarget && !paused && !panel" class="pixel-panel game__hint">
         <kbd>{{ showTouch ? 'A' : 'E' }}</kbd> <span class="game__hint-verb">{{ interactTarget.verb }}:</span> {{ interactTarget.name }}
       </p>
-      <DialogBox v-if="dialog" :dialog="dialog" @next="session.interact()" />
+      <DialogBox
+        v-if="dialog"
+        :dialog="dialog"
+        :revealed-text="dialogRevealedText"
+        :fully-revealed="dialogFullyRevealed"
+        @next="session.interact()"
+        @choose="session.chooseDialogOption($event)"
+        @reveal="game.revealDialogNow()"
+      />
       <StorySceneOverlay v-if="scene" :title="scene.title" :text="scene.text" @close="session.leaveScene()" />
       <RewardOverlay v-if="rewardOptions" :session="session" :title="rewardOptions.title" :options="rewardOptions.options" :can-decline="rewardOptions.canDecline" />
-      <TradeOverlay v-if="tradeOffers" :session="session" :offers="tradeOffers" :coins="coins" />
-      <FinaleOverlay v-if="finale" :title="finale.title" :lines="finale.lines" @close="session.leaveFinale()" />
+      <TradeOverlay
+        v-if="tradeOffers"
+        :session="session"
+        :offers="tradeOffers"
+        :artifact-offers="tradeArtifactOffers ?? []"
+        :coins="coins"
+      />
+      <FinaleOverlay
+        v-if="finale"
+        :title="finale.title"
+        :lines="finale.lines"
+        @close="session.leaveFinale()"
+        @new-game-plus="session.startNewGamePlus()"
+      />
 
       <ul class="game__toasts" aria-live="polite">
         <li v-for="toast in toasts" :key="toast.id" class="pixel-panel game__toast">{{ toast.text }}</li>
+        <SaveIndicator v-if="lastSavedAt" :saved-at="lastSavedAt" />
       </ul>
 
       <DeckOverlay v-if="panel === 'deck'" :session="session" @close="game.setPanel(null)" @changed="game.refresh()" />
@@ -128,6 +167,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown));
         II
       </button>
       <DebugPanel v-if="debug && !paused && !panel" :session="session" :mode-kind="modeKind" @changed="game.refresh()" />
+      <PerfMonitor v-if="debug" />
       <PauseMenu v-if="paused" @resume="game.setPaused(false)" />
 
       <Transition name="loader">
